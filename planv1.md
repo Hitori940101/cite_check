@@ -107,6 +107,31 @@ Before building from scratch, we must consider existing open-source citation ver
 
 **Context**: v2 is rewritten with `pyparsing` and recommended for new projects. While still in beta, it is actively maintained and more robust than v1. The bib format is well-standardized, so beta risk is minimal.
 
+### ADR-6: API Key Strategy — Optional Keys with Graceful Tiering
+
+**Decision**: The application works **out-of-box without any API keys**. Keys are optional upgrades that unlock higher rate limits or additional data sources.
+
+**Context**: Requiring users to register for API keys before first use creates friction. The tool should be immediately useful with free-tier/no-key sources, with keys as an opt-in enhancement.
+
+**API key tiers by source**:
+
+| Adapter | No Key | With Free Key | Key Required? |
+|---------|--------|---------------|---------------|
+| **Crossref** | Polite pool (add mailto) | Same | ❌ Never |
+| **Semantic Scholar** | ~100 req/5min (shared pool) | 1 RPS guaranteed | ❌ Optional upgrade |
+| **OpenAlex** | 100 credits/day (testing) | 100,000 credits/day | ⚠️ Strongly recommended |
+| **AMiner** | Free tier available | Higher limits | ❌ Optional upgrade |
+| **Baidu Academic** | N/A (scraping, no key) | N/A | ❌ Never |
+| **CNKI** | N/A (Playwright, no key) | N/A | ❌ Never |
+| **Google Scholar** | N/A (scholarly lib) | N/A (but proxy helps) | ❌ Never |
+
+**Implementation rules**:
+1. **Default behavior**: All adapters work with free/no-key access. On first launch, the user can verify citations immediately.
+2. **Settings dialog**: Each API-source has an optional API key field. Empty = use free tier.
+3. **Key status indicators**: Show ✅/⚠️/❌ next to each source in settings indicating key status and current rate limit tier.
+4. **Application guides**: If an adapter has NO free tier at all (hypothetical future adapter), display an inline "How to apply" link with step-by-step instructions and direct URL to the API registration page.
+5. **Rate limit feedback**: When a rate limit is hit, surface a non-blocking toast notification: *"Semantic Scholar rate limit reached. Add an API key in Settings for higher limits."* with a direct link to the settings dialog.
+
 ---
 
 ## 2. Tech Stack Summary
@@ -299,9 +324,10 @@ Input → DOI present?
 | 3.2 | Drag-and-drop file upload widget | 0.5d |
 | 3.3 | Result table with color-coded status (green/yellow/red) | 1d |
 | 3.4 | Background verification worker (QThread + Signal/Slot) | 1d |
-| 3.5 | Settings dialog (API keys, proxy config, adapter enable/disable) | 0.5d |
-| 3.6 | Export dialog (CSV, Excel, clean .bib) | 0.5d |
-| 3.7 | GUI tests with `pytest-qt` | 1d |
+| 3.5 | **Settings dialog**: per-adapter API key fields (optional), proxy config, adapter enable/disable; show ✅/⚠️/❌ key status indicators; inline "How to apply" links for sources requiring keys | 1d |
+| 3.6 | Rate-limit toast notification system (*"Rate limit reached. Add API key in Settings."*) | 0.5d |
+| 3.7 | Export dialog (CSV, Excel, clean .bib) | 0.5d |
+| 3.8 | GUI tests with `pytest-qt` | 1d |
 
 **Deliverable**: `python -m refchecker.gui` launches desktop app.
 

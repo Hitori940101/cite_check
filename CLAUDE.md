@@ -125,6 +125,7 @@ python -m refchecker.gui
 - **API-first**: Free APIs (Crossref, Semantic Scholar, OpenAlex, AMiner) cover 80%+ of citations without scraping
 - **Graceful degradation**: If one adapter fails, continue with others; surface partial results
 - **Chinese literature focus**: AMiner API (300M+ papers, strong Chinese coverage) is our key differentiator over existing tools
+- **Optional API keys (ADR-6)**: Tool works out-of-box with free/no-key tiers; API key fields in Settings are optional upgrades; show inline "How to apply" guides only for sources that have no free tier; toast notifications guide users to Settings when rate-limited
 
 ## Existing Tools (Reference Only)
 
