@@ -1,141 +1,418 @@
-# Cite Check — 项目规划 v1
+# RefChecker — Citation Verification System Development Plan
 
-## 1. 项目目标
+> **Version**: 2.1 (optimized with research — includes existing tool analysis)
+> **Updated**: 2026-05-30
+> **Status**: Pre-development
 
-构建一个学术引文自动检测系统，支持 LaTeX（.tex/.bib）和 Word（.docx）双格式输入，对论文引文进行四层自动化审查：
+---
 
-| 层级 | 功能 | 说明 |
-|------|------|------|
-| L1 格式验证 | 引用格式合规性检查 | 检查文中引用和参考文献是否符合指定格式规范（APA / IEEE / GB/T 7714 等） |
-| L2 一致性检查 | 文内-文后交叉匹配 | 正文每个 citation 在参考文献列表中有对应条目，反之亦然 |
-| L3 内容准确性 | 元数据验证 | 通过 Crossref / Semantic Scholar API 验证作者、年份、标题、期刊等元数据是否正确 |
-| L4 完整性检测 | 学术质量分析 | 缺失引用检测、自引比例分析、引用年份分布、引用集中度评估 |
+## 0. Existing Tool Landscape (Critical Context)
 
-## 2. 技术选型
+Before building from scratch, we must consider existing open-source citation verification tools:
 
-| 层级 | 技术 | 说明 |
-|------|------|------|
-| 语言 | Python 3.11+ | |
-| 包管理 | uv | |
-| 后端框架 | FastAPI | 与 paper_check 保持一致 |
-| 文档解析 | python-docx（Word）+ pybtex / bibtexparser（BibTeX） | |
-| API 集成 | Crossref API + Semantic Scholar API | 免费、无需 API Key 即可基础使用 |
-| 配置 | Hydra + OmegaConf | 多格式规范切换 |
-| 测试 | pytest + pytest-cov | 目标覆盖率 ≥ 80% |
-| 版本管理 | Git + Conventional Commits | |
+### Existing Tool A: RefChecker (by Mark Russinovich / Microsoft)
+- **GitHub**: https://github.com/markrussinovich/refchecker
+- **PyPI**: `academic-refchecker[llm,webui]`
+- **License**: MIT
+- **Language**: Python 3.11+
+- **Architecture**: Multi-stage pipeline — GROBID/LLM extraction → CrossRef/S2/OpenAlex/DBLP/ACL verification → LLM deep web search
+- **Features**: Docker deployment, Web UI, bulk checking, OpenReview scanning, SQLite caching, retraction detection
+- **Gap**: **No Chinese literature support** (no CNKI, Baidu Scholar, AMiner, Wanfang adapters)
+- **Assessment**: Architecture is excellent reference; our project adds unique Chinese literature coverage
 
-## 3. 核心流程
+### Existing Tool B: Hallucinator (by Gianluca Stringhini)
+- **GitHub**: https://github.com/gianlucasb/hallucinator
+- **License**: AGPL-3.0
+- **Language**: Rust core + Python bindings
+- **Features**: TUI, CLI, offline databases (DBLP/ACL/arXiv/OpenAlex), retraction detection
+- **Gap**: No Chinese literature, AGPL license limits commercial use
+- **Assessment**: Performance architecture worth studying; not suitable for forking (AGPL + Rust)
+
+### Strategic Decision
+
+> **We will NOT fork an existing tool.** Our project's primary differentiator is **Chinese academic literature verification** — a gap no existing open-source tool addresses. We will study their adapter patterns, scoring algorithms, and pipeline designs, but build our own system focused on:
+> 1. Chinese literature databases (AMiner, Baidu Scholar, CNKI)
+> 2. Desktop-first UX (PySide6) for non-technical users
+> 3. Bilingual (Chinese/English) reference parsing
+
+---
+
+## 1. Architecture Decision Records (ADRs)
+
+### ADR-1: Application Form Factor — Desktop App (PySide6) + CLI
+
+**Decision**: Build as a **PySide6 desktop application** with a companion **CLI interface**.
+
+**Context**: The original plan considered two options (PySide6 vs Tauri+React). After analysis:
+
+- The target user base (researchers, students, librarians) needs a **simple install-and-run** experience.
+- PySide6 provides native desktop UX, file drag-and-drop, system tray integration, and offline capability.
+- A CLI interface enables batch processing, CI/CD integration, and headless server use.
+- The Tauri approach adds complexity (multi-language, sidecar process management) without proportional benefit for this use case.
+
+**Consequences**:
+- Single-language codebase (Python).
+- Larger binary size (~60-100MB due to Qt), acceptable for desktop distribution.
+- CLI layer can be built on top of the same core engine.
+
+### ADR-2: Verification Strategy — API-First with Fallback Scraping
+
+**Decision**: Prioritize **free open APIs** (Crossref → Semantic Scholar → OpenAlex) before any web scraping.
+
+**Context**: The original plan listed scraping as a core component. Research reveals three powerful free APIs that cover the vast majority of verification needs:
+
+| API | Coverage | Rate Limit | Python SDK | Key Feature |
+|-----|----------|------------|------------|-------------|
+| **Crossref** | 150M+ DOIs | Polite pool (with mailto) | `habanero` (preferred) or `crossrefapi` | `query.bibliographic` param for fuzzy lookup; includes Retraction Watch |
+| **Semantic Scholar** | 200M+ papers | Free tier (1 RPS with key) | `semanticscholar` | Title/DOI search, citation graphs |
+| **OpenAlex** | 450M+ works | Free key: 100K credits/day | `pyalex` | Broadest coverage, some Chinese journals |
+| **AMiner** | 300M+ papers (strong Chinese) | Free tier | REST API (`requests`) | **Best free source for Chinese literature** |
+
+**Layered verification strategy**:
+1. **DOI direct lookup** (if DOI present) → Crossref API (instant, deterministic)
+2. **Title + author search** → Semantic Scholar API → OpenAlex API → AMiner API
+3. **Chinese literature fallback** → AMiner (API) → Baidu Academic (requests-based) → CNKI search page (Playwright, search results only, no login)
+4. **Last resort** → Google Scholar via `scholarly` library (with proxy support)
+
+**Consequences**:
+- 80%+ of English citations can be verified via APIs alone (no scraping, no anti-crawl issues).
+- Scraping is reduced to a **fallback** for Chinese databases and edge cases.
+- More reliable, faster, and respectful of source databases.
+
+### ADR-3: Environment Management — Conda
+
+**Decision**: Use **conda** for environment management.
+
+**Context**: User specification. Conda provides:
+- Cross-platform binary dependency management (especially useful for Qt/PySide6).
+- Consistent environment across dev/machine boundaries.
+- `environment.yml` for reproducible setups.
+
+### ADR-4: Fuzzy Matching — RapidFuzz
+
+**Decision**: Use **RapidFuzz** (not raw Levenshtein) for citation matching.
+
+**Context**: [RapidFuzz](https://github.com/rapidfuzz/RapidFuzz) is a C++-backed fuzzy string matching library that is significantly faster than pure-Python alternatives. A [peer-reviewed comparative study](https://www.researchgate.net/publication/390846511) confirms it outperforms FuzzyWuzzy, difflib, and python-Levenshtein across multilingual datasets.
+
+**Matching algorithm design**:
+- Title similarity: `fuzz.ratio` + `fuzz.token_sort_ratio` (handles word reordering)
+- Author matching: `fuzz.token_set_ratio` (handles subset/superset author lists)
+- Year matching: exact match or ±1 tolerance
+- Composite score: weighted combination (title: 0.5, author: 0.3, year: 0.1, venue: 0.1)
+- Thresholds: ≥0.85 = **Verified**, 0.60-0.84 = **Suspicious**, <0.60 = **Likely Fabricated**
+
+### ADR-5: BibTeX Parsing — bibtexparser v2
+
+**Decision**: Use **bibtexparser v2** (beta, `2.0.0b9`).
+
+**Context**: v2 is rewritten with `pyparsing` and recommended for new projects. While still in beta, it is actively maintained and more robust than v1. The bib format is well-standardized, so beta risk is minimal.
+
+---
+
+## 2. Tech Stack Summary
 
 ```
-输入文件 (.tex/.bib 或 .docx)
-  │
-  ├─ 解析器选择 ──→ LaTeXParser / DocxParser
-  │                   │
-  │                   ├─ 提取文中引用 (in-text citations)
-  │                   └─ 提取参考文献列表 (reference list)
-  │
-  ├─ L1 格式验证 ──→ 格式规则引擎（APA / IEEE / GB-T-7714）
-  │
-  ├─ L2 一致性检查 → citation ↔ reference 双向匹配
-  │
-  ├─ L3 内容准确性 → API 查询 + 元数据比对
-  │
-  ├─ L4 完整性检测 → 统计分析 + 学术质量指标
-  │
-  └─ 生成报告 ──→ JSON / HTML 报告
+┌─────────────────────────────────────────────────────┐
+│                   Presentation Layer                 │
+│  PySide6 (desktop GUI)  │  Click/Typer (CLI)        │
+├─────────────────────────────────────────────────────┤
+│                    Application Layer                  │
+│  QThread workers  │  Signal/Slot  │  Progress bars   │
+├─────────────────────────────────────────────────────┤
+│                      Core Engine                      │
+│  Parser → Verifier → Scorer → Reporter               │
+│  (bibtexparser)   (API adapters)  (RapidFuzz)        │
+├─────────────────────────────────────────────────────┤
+│                   Infrastructure Layer                │
+│  Crossref │ Semantic Scholar │ OpenAlex │ AMiner │ Baidu/CNKI │
+│  (habanero) (semanticscholar) (pyalex) (requests) (playwright)│
+├─────────────────────────────────────────────────────┤
+│                    Cross-cutting                      │
+│  Logging (structlog) │ Config (Pydantic Settings)    │
+│  Error handling      │ Export (openpyxl/csv)         │
+└─────────────────────────────────────────────────────┘
 ```
 
-## 4. 项目结构（规划）
+### Core Dependencies
+
+| Package | Version | Purpose |
+|---------|---------|---------|
+| `PySide6` | ≥6.7 | Desktop GUI framework |
+| `bibtexparser` | ≥2.0.0b7 | BibTeX file parsing |
+| `habanero` | ≥2.3 | Crossref REST API client (preferred over crossrefapi) |
+| `semanticscholar` | ≥0.8 | Semantic Scholar API client |
+| `pyalex` | ≥0.14 | OpenAlex API client |
+| `rapidfuzz` | ≥3.9 | Fuzzy string matching |
+| `httpx` | ≥0.28 | Async HTTP client (API calls) |
+| `playwright` | ≥1.40 | Headless browser (CNKI fallback) |
+| `structlog` | ≥24.1 | Structured logging |
+| `pydantic` | ≥2.0 | Data models and settings |
+| `openpyxl` | ≥3.1 | Excel export |
+| `click` or `typer` | latest | CLI interface |
+| `qasync` | ≥0.27 | Qt + asyncio integration |
+
+### Dev Dependencies
+
+| Package | Purpose |
+|---------|---------|
+| `pytest` | Testing framework |
+| `pytest-qt` | Qt widget testing |
+| `pytest-asyncio` | Async test support |
+| `pytest-cov` | Coverage reporting |
+| `ruff` | Linting + formatting |
+| `mypy` | Type checking |
+| `pre-commit` | Git hook management |
+
+---
+
+## 3. Project Structure
 
 ```
 cite_check/
-├── src/
-│   └── cite_check/
-│       ├── __init__.py
-│       ├── main.py                 # CLI / API 入口
-│       ├── parsers/                # 文档解析层
-│       │   ├── __init__.py         # Parser 工厂 & Registry
-│       │   ├── base.py             # BaseParser 抽象类
-│       │   ├── latex_parser.py     # LaTeX + BibTeX 解析
-│       │   └── docx_parser.py      # Word 文档解析
-│       ├── checkers/               # 四层检查引擎
-│       │   ├── __init__.py         # Checker 工厂 & Registry
-│       │   ├── base.py             # BaseChecker 抽象类
-│       │   ├── format_checker.py   # L1: 格式验证
-│       │   ├── consistency.py      # L2: 一致性检查
-│       │   ├── accuracy.py         # L3: 内容准确性
-│       │   └── completeness.py     # L4: 完整性检测
-│       ├── schemas/                # 数据模型
-│       │   ├── __init__.py
-│       │   ├── citation.py         # Citation 数据类
-│       │   └── report.py           # 检查报告数据类
-│       ├── apis/                   # 外部 API 客户端
-│       │   ├── __init__.py
-│       │   ├── crossref.py         # Crossref API
-│       │   └── semantic_scholar.py # Semantic Scholar API
-│       ├── rules/                  # 格式规范定义
-│       │   ├── __init__.py         # 规则注册
-│       │   ├── apa.py
-│       │   ├── ieee.py
-│       │   └── gb_t_7714.py
-│       └── reporters/              # 报告生成
-│           ├── __init__.py
-│           ├── json_reporter.py
-│           └── html_reporter.py
-├── tests/
-│   ├── parsers/
-│   ├── checkers/
-│   └── conftest.py
-├── conf/                           # Hydra 配置
-│   └── config.yaml
-├── pyproject.toml
 ├── CLAUDE.md
-└── planv1.md
+├── README.md
+├── environment.yml                    # Conda environment
+├── pyproject.toml                     # Project metadata & deps
+├── src/
+│   └── refchecker/
+│       ├── __init__.py
+│       ├── cli/                       # CLI interface
+│       │   ├── __init__.py
+│       │   └── main.py               # Click/Typer CLI entry
+│       ├── gui/                       # PySide6 desktop GUI
+│       │   ├── __init__.py
+│       │   ├── app.py                # QApplication setup
+│       │   ├── main_window.py        # Main window layout
+│       │   ├── widgets/              # Custom widgets
+│       │   │   ├── __init__.py
+│       │   │   ├── file_drop.py      # Drag-drop file upload
+│       │   │   ├── result_table.py   # Verification result grid
+│       │   │   └── progress.py       # Progress bar widget
+│       │   ├── workers/              # QThread workers
+│       │   │   ├── __init__.py
+│       │   │   └── verify_worker.py  # Background verification
+│       │   └── dialogs/              # Settings, about dialogs
+│       │       ├── __init__.py
+│       │       └── settings.py
+│       ├── core/                      # Core verification engine
+│       │   ├── __init__.py
+│       │   ├── models.py             # Pydantic data models
+│       │   ├── parser.py             # BibTeX/text parser
+│       │   ├── scorer.py             # Fuzzy matching & scoring
+│       │   ├── engine.py             # Orchestration engine
+│       │   └── exporter.py           # CSV/Excel/bib export
+│       ├── adapters/                  # API/web adapters
+│       │   ├── __init__.py
+│       │   ├── base.py               # Abstract adapter interface
+│       │   ├── crossref_adapter.py   # Crossref API
+│       │   ├── s2_adapter.py         # Semantic Scholar API
+│       │   ├── openalex_adapter.py   # OpenAlex API
+│       │   ├── aminer_adapter.py     # AMiner API (Chinese literature)
+│       │   ├── baidu_adapter.py      # Baidu Academic
+│       │   ├── cnki_adapter.py       # CNKI (Playwright)
+│       │   └── scholar_adapter.py    # Google Scholar (scholarly)
+│       └── config.py                 # Settings & configuration
+├── tests/
+│   ├── conftest.py
+│   ├── unit/
+│   │   ├── test_parser.py
+│   │   ├── test_scorer.py
+│   │   ├── test_models.py
+│   │   └── test_exporter.py
+│   ├── integration/
+│   │   ├── test_crossref_adapter.py
+│   │   ├── test_s2_adapter.py
+│   │   ├── test_openalex_adapter.py
+│   │   └── test_engine.py
+│   └── e2e/
+│       ├── test_cli.py
+│       └── test_gui.py
+├── plan/                              # Planning documents
+│   └── planv1.md                      # This file
+├── temp/                              # Scratch files
+├── .github/
+│   └── workflows/
+│       └── build.yml                  # Cross-platform build CI
+└── .pre-commit-config.yaml
 ```
 
-## 5. 开发阶段
+---
 
-### Phase 1: 基础骨架 + 解析层
-- 项目骨架搭建（uv init, pyproject.toml, 目录结构）
-- 数据模型定义（Citation, Reference, Report）
-- LaTeX 解析器（.tex 中提取 citation, .bib 中提取 reference）
-- Word 解析器（.docx 中提取 citation 和 reference）
-- 解析器单元测试
+## 4. Phased Development Plan
 
-### Phase 2: L1 格式验证
-- 格式规则引擎（规则定义 + 验证逻辑）
-- APA 格式规则实现
-- IEEE 格式规则实现
-- GB/T 7714 格式规则实现
-- 格式检查器测试 + 样例文件
+### Phase 1: Core Data Models & Parser (Week 1-2)
 
-### Phase 3: L2 一致性检查
-- citation ↔ reference 双向匹配算法
-- 模糊匹配（处理拼写差异、缩写不一致等）
-- 一致性检查器测试
+**Goal**: Parse `.bib` files into structured internal representation.
 
-### Phase 4: L3 内容准确性
-- Crossref API 客户端（DOI 查询、元数据检索）
-- Semantic Scholar API 客户端（补充查询）
-- 元数据比对逻辑（作者、年份、标题、期刊名）
-- API 客户端 mock 测试 + 集成测试
+| Task | Description | Est. |
+|------|-------------|------|
+| 1.1 | Set up conda environment, project skeleton, `pyproject.toml` | 0.5d |
+| 1.2 | Define `ReferenceItem` (Pydantic model): title, authors, year, journal/venue, DOI, volume, issue, pages, verification status | 0.5d |
+| 1.3 | Implement BibTeX parser using `bibtexparser` v2 | 1d |
+| 1.4 | Implement GBT 7714 text parser (regex-based) | 1d |
+| 1.5 | Build logging module (`structlog`) and error hierarchy | 0.5d |
+| 1.6 | Unit tests for parser (≥90% coverage) | 1d |
+| 1.7 | CLI skeleton: `refchecker parse <file>` command | 0.5d |
 
-### Phase 5: L4 完整性检测
-- 缺失引用检测启发式规则
-- 自引比例分析
-- 引用年份分布统计
-- 引用集中度评估（过度依赖少数来源）
-- 完整性检查器测试
+**Deliverable**: `refchecker parse paper.bib` produces structured JSON output.
 
-### Phase 6: 报告 + CLI + API
-- JSON / HTML 报告生成器
-- CLI 入口（click / typer）
-- FastAPI REST API（可选）
-- 端到端测试
+### Phase 2: Verification Engine & API Adapters (Week 3-5) ⭐ HARDEST
 
-## 6. 约束
+**Goal**: Verify citations against multiple academic databases.
 
-- 所有 API 调用必须有 rate limiting 和重试机制
-- 所有 API 调用必须有离线/mock 回退，确保测试不依赖网络
-- 每个功能完成后必须测试通过再 git commit
-- 文件不超过 400 行，函数不超过 50 行
+| Task | Description | Est. |
+|------|-------------|------|
+| 2.1 | Define abstract `VerificationAdapter` interface | 0.5d |
+| 2.2 | Implement **Crossref adapter** (DOI lookup + `query.bibliographic`) via `habanero` | 1.5d |
+| 2.3 | Implement **Semantic Scholar adapter** (title/DOI search) | 1.5d |
+| 2.4 | Implement **OpenAlex adapter** (title/author/DOI search) via `pyalex` | 1d |
+| 2.5 | Implement **AMiner adapter** (Chinese literature — key differentiator) | 1.5d |
+| 2.6 | Implement **Baidu Academic adapter** (requests-based, moderate anti-crawl) | 1.5d |
+| 2.7 | Implement **CNKI adapter** (Playwright, search results only) | 2d |
+| 2.8 | Implement fuzzy matching scorer using RapidFuzz | 1d |
+| 2.9 | Build orchestration engine (parallel adapter queries, result aggregation) | 1.5d |
+| 2.10 | Rate limiting, retry logic, and proxy configuration | 1d |
+| 2.11 | Integration tests with mocked API responses | 1d |
+| 2.12 | CLI: `refchecker verify <file>` command | 0.5d |
+
+**Verification priority chain**:
+```
+Input → DOI present?
+  ├─ Yes → Crossref DOI lookup → Found? → Score → Done
+  └─ No → Title+Author search:
+            ├─ Semantic Scholar → Score
+            ├─ OpenAlex → Score
+            ├─ AMiner → Score (best for Chinese lit)
+            └─ (fallback) Baidu Academic → Score
+         → Aggregate scores → Final verdict
+```
+
+**Deliverable**: `refchecker verify paper.bib --adapters crossref,s2,openalex` outputs verification results.
+
+### Phase 3: Desktop GUI (Week 6-7)
+
+**Goal**: Intuitive PySide6 desktop interface.
+
+| Task | Description | Est. |
+|------|-------------|------|
+| 3.1 | Main window layout (file upload area, channel selector, results table) | 1d |
+| 3.2 | Drag-and-drop file upload widget | 0.5d |
+| 3.3 | Result table with color-coded status (green/yellow/red) | 1d |
+| 3.4 | Background verification worker (QThread + Signal/Slot) | 1d |
+| 3.5 | Settings dialog (API keys, proxy config, adapter enable/disable) | 0.5d |
+| 3.6 | Export dialog (CSV, Excel, clean .bib) | 0.5d |
+| 3.7 | GUI tests with `pytest-qt` | 1d |
+
+**Deliverable**: `python -m refchecker.gui` launches desktop app.
+
+### Phase 4: Export, Polish & Testing (Week 8)
+
+**Goal**: Production-quality export and comprehensive test coverage.
+
+| Task | Description | Est. |
+|------|-------------|------|
+| 4.1 | Export to Excel (color-coded, with summary statistics) | 0.5d |
+| 4.2 | Export to clean .bib (remove fabricated entries) | 0.5d |
+| 4.3 | Generate verification report (Markdown) | 0.5d |
+| 4.4 | Comprehensive test coverage (≥80%) | 1d |
+| 4.5 | Performance optimization (batch API calls, caching) | 1d |
+| 4.6 | Documentation and README | 0.5d |
+
+**Deliverable**: Fully functional, tested application with documentation.
+
+### Phase 5: Packaging & Distribution (Week 9)
+
+**Goal**: Cross-platform distribution.
+
+| Task | Description | Est. |
+|------|-------------|------|
+| 5.1 | PyInstaller config for Linux build | 0.5d |
+| 5.2 | GitHub Actions workflow (Linux, Windows, macOS) | 1d |
+| 5.3 | Application icon and metadata | 0.5d |
+| 5.4 | Smoke tests on packaged binaries | 0.5d |
+
+**Deliverable**: `.exe`, `.dmg`, and `.AppImage` downloads from GitHub Releases.
+
+### Phase 6: Advanced Features (Future)
+
+| Feature | Description |
+|---------|-------------|
+| LLM-assisted text parsing | Use lightweight LLM API (DeepSeek/Qwen) to parse non-standard citation formats |
+| PDF citation extraction | Extract references directly from PDF files |
+| Batch processing | Process multiple .bib files or entire directories |
+| Zotero integration | Import from / export to Zotero collections |
+| Citation graph visualization | Show citation relationships visually |
+
+---
+
+## 5. Key Risk Mitigations
+
+### Anti-Crawl Protection
+
+| Risk | Mitigation |
+|------|------------|
+| IP ban from CNKI/Google Scholar | Random 3-8s delay between requests; user-configurable proxy; limit to search results page only |
+| Rate limiting from APIs | Respect `Retry-After` headers; implement exponential backoff; use polite pool with email |
+| CAPTCHA blocking | Surface error to user with manual retry option; recommend proxy rotation |
+
+### Chinese Literature Coverage
+
+| Challenge | Approach |
+|-----------|----------|
+| No Chinese API in existing tools | **AMiner API** (free, 300M+ papers, strong Chinese coverage) is our key differentiator |
+| CNKI requires campus IP | Search results page is public; no detail page access needed |
+| Baidu Academic rate limits | Moderate request frequency; parse search results with `requests` + `BeautifulSoup4` |
+| Mixed Chinese/English metadata | Unicode-aware string matching; RapidFuzz handles CJK characters |
+
+### Desktop Application
+
+| Challenge | Approach |
+|-----------|----------|
+| UI freezing during verification | QThread + Signal/Slot pattern; progress updates per-item |
+| Large .bib files (1000+ entries) | Chunked processing with progress feedback; cancel support |
+| Binary size (~60-100MB) | Acceptable for desktop; use UPX compression |
+
+---
+
+## 6. Verification Result Taxonomy
+
+| Status | Color | Criteria |
+|--------|-------|----------|
+| ✅ **Verified** | Green | Found in ≥1 source with composite score ≥0.85 |
+| ⚠️ **Suspicious** | Yellow | Partial match (score 0.60-0.84), or found with significant discrepancies |
+| ❌ **Likely Fabricated** | Red | Not found in any source, or very low match score (<0.60) |
+| ℹ️ **Unable to Verify** | Gray | Network error, rate limited, or source unavailable |
+| 🔄 **Pending** | White | Not yet checked |
+
+---
+
+## 7. Research Sources
+
+### Existing Citation Verification Tools
+- [RefChecker (Mark Russinovich / Microsoft)](https://github.com/markrussinovich/refchecker) — MIT, Python 3.11+, most comprehensive existing tool
+- [Hallucinator (Gianluca Stringhini)](https://github.com/gianlucasb/hallucinator) — AGPL-3.0, Rust core + Python bindings
+- [HALLMARK Benchmark](https://github.com/rpatrik96/hallmark) — Citation hallucination detection benchmark
+
+### APIs
+- [Crossref API — Verifying References](https://community.crossref.org/t/verifying-references/15794)
+- [habanero — Crossref Python client](https://github.com/sckott/habanero) (preferred over crossrefapi)
+- [Semantic Scholar API Docs](https://api.semanticscholar.org/api-docs/)
+- [Semantic Scholar Python SDK](https://semanticscholar.readthedocs.io/en/latest/overview.html)
+- [OpenAlex API](https://developers.openalex.org/)
+- [PyAlex Python library](https://github.com/J535D165/pyalex)
+- [OpenAlex API Key Requirement (Feb 2025)](https://docs.ropensci.org/openalexR/)
+- [AMiner Open API](https://open.aminer.cn/) — Best free API for Chinese academic literature
+
+### Libraries
+- [bibtexparser v2](https://bibtexparser.readthedocs.io/)
+- [RapidFuzz — Fuzzy Matching Library](https://github.com/rapidfuzz/RapidFuzz)
+- [RapidFuzz Comparative Study](https://www.researchgate.net/publication/390846511)
+- [Google Scholar Scraping Alternatives](https://scrapfly.io/blog/posts/google-scholar-api-and-alternatives)
+
+### Chinese Database Scraping
+- [CNKI Scraping with Selenium (2025)](https://www.cnblogs.com/ofnoname/p/18751494)
+- [CNKI-download Python tool](https://blog.csdn.net/gitblog_00449/article/details/161271275)
+
+### Desktop App & Packaging
+- [PySide6 Packaging with PyInstaller](https://www.pythonguis.com/tutorials/packaging-pyside6-applications-windows-pyinstaller-installforge/)
+- [PyInstaller v6.x Changelog](https://pyinstaller.org/en/v6.16.0/CHANGES.html)
