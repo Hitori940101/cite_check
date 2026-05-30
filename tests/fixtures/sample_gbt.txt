@@ -1,0 +1,3 @@
+[1] Vaswani A, Shazeer N, Parmar N. Attention Is All You Need[J]. Advances in Neural Information Processing Systems, 2017, 30.
+[2] Sutton R S, Barto A G. Reinforcement Learning: An Introduction[M]. MIT Press, 2018.
+[3] Devlin J, Chang M W, Lee K. BERT: Pre-training of Deep Bidirectional Transformers[C]//NAACL-HLT, 2019: 4171-4186.
