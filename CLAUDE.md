@@ -126,6 +126,8 @@ python -m refchecker.gui
 - **Graceful degradation**: If one adapter fails, continue with others; surface partial results
 - **Chinese literature focus**: AMiner API (300M+ papers, strong Chinese coverage) is our key differentiator over existing tools
 - **Optional API keys (ADR-6)**: Tool works out-of-box with free/no-key tiers; API key fields in Settings are optional upgrades; show inline "How to apply" guides only for sources that have no free tier; toast notifications guide users to Settings when rate-limited
+- **Exponential backoff (mandatory)**: All adapters implement exponential backoff with jitter (initial 1s, max 60s, factor 2). This is a Semantic Scholar API policy requirement, not just best practice. Respects `Retry-After` headers.
+- **Key lifecycle awareness**: Surface warnings for keys with expiration policies (e.g., S2 keys removed after 60 days inactivity). Show "last used" hints in Settings.
 
 ## Existing Tools (Reference Only)
 

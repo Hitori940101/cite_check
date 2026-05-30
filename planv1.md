@@ -115,22 +115,29 @@ Before building from scratch, we must consider existing open-source citation ver
 
 **API key tiers by source**:
 
-| Adapter | No Key | With Free Key | Key Required? |
-|---------|--------|---------------|---------------|
+| Adapter | No Key (Default) | With Free Key | Key Required? |
+|---------|-------------------|---------------|---------------|
 | **Crossref** | Polite pool (add mailto) | Same | ❌ Never |
-| **Semantic Scholar** | ~100 req/5min (shared pool) | 1 RPS guaranteed | ❌ Optional upgrade |
-| **OpenAlex** | 100 credits/day (testing) | 100,000 credits/day | ⚠️ Strongly recommended |
+| **Semantic Scholar** | ~100 req/5min (shared, variable) | 1 RPS guaranteed | ❌ Optional upgrade |
+| **OpenAlex** | 100 credits/day (testing only) | 100,000 credits/day | ⚠️ Strongly recommended |
 | **AMiner** | Free tier available | Higher limits | ❌ Optional upgrade |
 | **Baidu Academic** | N/A (scraping, no key) | N/A | ❌ Never |
 | **CNKI** | N/A (Playwright, no key) | N/A | ❌ Never |
 | **Google Scholar** | N/A (scholarly lib) | N/A (but proxy helps) | ❌ Never |
 
+**Semantic Scholar API key application prerequisites** (per their policy):
+> Users must confirm: (1) they have already made successful unauthenticated requests, (2) they acknowledge there are only 2 rate plans, (3) they will apply exponential backoff, (4) keys inactive for 60+ days may be removed.
+
+This means **we MUST implement exponential backoff as a hard requirement**, not just best practice — it is a condition of API access.
+
 **Implementation rules**:
-1. **Default behavior**: All adapters work with free/no-key access. On first launch, the user can verify citations immediately.
-2. **Settings dialog**: Each API-source has an optional API key field. Empty = use free tier.
+1. **Default behavior**: All adapters work with free/no-key access. On first launch, the user can verify citations immediately — no registration required.
+2. **Settings dialog**: Each API-source has an optional API key field. Empty = use free tier. Each field has a subtle hint about what the key unlocks (e.g., *"Adding a key increases Semantic Scholar limits from ~100/5min to 1 RPS"*).
 3. **Key status indicators**: Show ✅/⚠️/❌ next to each source in settings indicating key status and current rate limit tier.
-4. **Application guides**: If an adapter has NO free tier at all (hypothetical future adapter), display an inline "How to apply" link with step-by-step instructions and direct URL to the API registration page.
-5. **Rate limit feedback**: When a rate limit is hit, surface a non-blocking toast notification: *"Semantic Scholar rate limit reached. Add an API key in Settings for higher limits."* with a direct link to the settings dialog.
+4. **Application guides with prerequisites**: The "How to apply" link for each source shows a step-by-step guide. For Semantic Scholar specifically, remind users they must make unauthenticated requests first before applying. Include direct URL to the API registration page.
+5. **Key lifecycle warning**: Display a note in Settings for sources with key expiration policies (e.g., Semantic Scholar: *"⚠️ Keys inactive for 60+ days may be removed. Use the tool regularly to keep your key active."*). Optionally show "last used" date if we track it.
+6. **Exponential backoff (mandatory)**: All adapters MUST implement exponential backoff with jitter. This is not optional — it is a Semantic Scholar API requirement and best practice for all sources. Implementation: initial delay 1s, max delay 60s, factor 2, jitter ±0.5s. Respects `Retry-After` headers when present.
+7. **Rate limit feedback**: When a rate limit is hit, surface a non-blocking toast notification: *"Semantic Scholar rate limit reached. Add an API key in Settings for higher limits."* with a direct link to the settings dialog.
 
 ---
 
@@ -287,18 +294,20 @@ cite_check/
 
 | Task | Description | Est. |
 |------|-------------|------|
-| 2.1 | Define abstract `VerificationAdapter` interface | 0.5d |
-| 2.2 | Implement **Crossref adapter** (DOI lookup + `query.bibliographic`) via `habanero` | 1.5d |
-| 2.3 | Implement **Semantic Scholar adapter** (title/DOI search) | 1.5d |
-| 2.4 | Implement **OpenAlex adapter** (title/author/DOI search) via `pyalex` | 1d |
-| 2.5 | Implement **AMiner adapter** (Chinese literature — key differentiator) | 1.5d |
-| 2.6 | Implement **Baidu Academic adapter** (requests-based, moderate anti-crawl) | 1.5d |
-| 2.7 | Implement **CNKI adapter** (Playwright, search results only) | 2d |
-| 2.8 | Implement fuzzy matching scorer using RapidFuzz | 1d |
-| 2.9 | Build orchestration engine (parallel adapter queries, result aggregation) | 1.5d |
-| 2.10 | Rate limiting, retry logic, and proxy configuration | 1d |
-| 2.11 | Integration tests with mocked API responses | 1d |
-| 2.12 | CLI: `refchecker verify <file>` command | 0.5d |
+| 2.1 | Define abstract `VerificationAdapter` interface with built-in exponential backoff | 0.5d |
+| 2.2 | Implement **exponential backoff mixin** (base class): initial 1s, max 60s, factor 2, jitter ±0.5s, `Retry-After` header support — **mandatory** per S2 API policy | 0.5d |
+| 2.3 | Implement **Crossref adapter** (DOI lookup + `query.bibliographic`) via `habanero` | 1.5d |
+| 2.4 | Implement **Semantic Scholar adapter** (title/DOI search, backoff-aware) | 1.5d |
+| 2.5 | Implement **OpenAlex adapter** (title/author/DOI search) via `pyalex` | 1d |
+| 2.6 | Implement **AMiner adapter** (Chinese literature — key differentiator) | 1.5d |
+| 2.7 | Implement **Baidu Academic adapter** (requests-based, moderate anti-crawl) | 1.5d |
+| 2.8 | Implement **CNKI adapter** (Playwright, search results only) | 2d |
+| 2.9 | Implement fuzzy matching scorer using RapidFuzz | 1d |
+| 2.10 | Build orchestration engine (parallel adapter queries, result aggregation) | 1.5d |
+| 2.11 | API key management module (load/save per-adapter keys, key status check, lifecycle warnings) | 0.5d |
+| 2.12 | Proxy configuration module (HTTP/SOCKS5, per-adapter override) | 0.5d |
+| 2.13 | Integration tests with mocked API responses | 1d |
+| 2.14 | CLI: `refchecker verify <file>` command | 0.5d |
 
 **Verification priority chain**:
 ```
