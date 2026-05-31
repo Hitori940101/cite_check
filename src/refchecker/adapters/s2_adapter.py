@@ -11,7 +11,7 @@ Exponential backoff is mandatory per S2 API policy.
 
 import httpx
 from semanticscholar import SemanticScholar
-from semanticscholar.exception import SemanticScholarException
+from semanticscholar import SemanticScholarException
 
 from refchecker.adapters.base import VerificationAdapter
 from refchecker.core.exceptions import RateLimitError
