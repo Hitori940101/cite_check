@@ -6,7 +6,7 @@ Emits a signal with the file path when a valid file is dropped.
 
 from pathlib import Path
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QFileDialog,
     QFrame,
@@ -57,17 +57,17 @@ class FileDropWidget(QFrame):
 
         icon_label = QLabel("📄")
         icon_label.setStyleSheet("font-size: 32px; border: none;")
-        icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)  # type: ignore[name-defined]
+        icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         inner.addWidget(icon_label)
 
         main_label = QLabel("Drop .bib or .txt file here")
         main_label.setStyleSheet(_LABEL_STYLE)
-        main_label.setAlignment(Qt.AlignmentFlag.AlignCenter)  # type: ignore[name-defined]
+        main_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         inner.addWidget(main_label)
 
         sub_label = QLabel("or click to browse")
         sub_label.setStyleSheet(_SUB_LABEL_STYLE)
-        sub_label.setAlignment(Qt.AlignmentFlag.AlignCenter)  # type: ignore[name-defined]
+        sub_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         inner.addWidget(sub_label)
 
         layout.addLayout(inner)

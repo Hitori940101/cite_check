@@ -9,7 +9,7 @@ Displays verification results in a color-coded QTableWidget:
 Provides right-click context menu for copy, open URL, and export.
 """
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QAction, QColor
 from PySide6.QtWidgets import (
     QHeaderView,

@@ -9,8 +9,12 @@ import sys
 
 import pytest
 
-# Skip all GUI tests in headless environments
-_HAS_DISPLAY = os.environ.get("DISPLAY") or sys.platform == "win32"
+# GUI tests run on macOS (native display), Windows, or with QT_QPA_PLATFORM=offscreen
+_HAS_DISPLAY = (
+    os.environ.get("DISPLAY")
+    or os.environ.get("QT_QPA_PLATFORM") == "offscreen"
+    or sys.platform in ("win32", "darwin")
+)
 pytestmark = pytest.mark.skipif(not _HAS_DISPLAY, reason="No display available (headless)")
 
 from refchecker.core.models import (
@@ -156,10 +160,11 @@ class TestVerifyWorker:
         engine = VerificationEngine([])
         refs = [ReferenceItem(title="Test", authors=[])]
         worker = VerifyWorker(refs, engine)
-        qtbot.addWidget(worker)
+        # VerifyWorker is QThread, not QWidget — just verify creation
         assert worker is not None
+        worker.deleteLater()
 
-    def test_cancel(self, qtbot) -> None:
+    def test_cancel(self) -> None:
         """Cancel sets cancelled flag."""
         from refchecker.gui.workers.verify_worker import VerifyWorker
         from refchecker.engine import VerificationEngine
