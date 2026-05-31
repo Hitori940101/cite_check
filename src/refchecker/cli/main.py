@@ -1,10 +1,15 @@
 """CLI interface for RefChecker.
 
-Provides command-line access to citation parsing and verification.
+Provides command-line access to citation parsing, verification, and
+API key management.
 
 Usage:
     refchecker parse <file> [--format json|table]
     refchecker verify <file> [--adapters crossref,s2,openalex] [--output results.csv]
+    refchecker set-key <adapter> <api-key>
+    refchecker get-key <adapter>
+    refchecker delete-key <adapter>
+    refchecker list-keys
 """
 
 import asyncio
@@ -219,6 +224,102 @@ def cli(verbose: bool) -> None:
     """RefChecker — Citation verification for academic papers."""
     level = "DEBUG" if verbose else "INFO"
     configure_logging(level=level)
+
+
+# --- API Key Management Commands ---
+
+_ADAPTER_TO_KEY_NAME = {
+    "s2": "s2_api_key",
+    "openalex": "openalex_api_key",
+    "aminer": "aminer_api_key",
+}
+
+
+@cli.command("set-key")
+@click.argument("adapter", type=click.Choice(list(_ADAPTER_TO_KEY_NAMES.keys())))
+@click.argument("api_key")
+def set_key(adapter: str, api_key: str) -> None:
+    """Store an API key for an adapter (encrypted).
+
+    The key is saved in the OS-native credential store (Keychain on macOS,
+    Secret Service on Linux, Windows Credential Manager on Windows).
+
+    \b
+    Supported adapters: s2, openalex, aminer
+    """
+    try:
+        from refchecker.core.key_store import store_key
+    except ImportError:
+        click.echo("Error: 'keyring' package is required for encrypted key storage.", err=True)
+        click.echo("Install it with: pip install keyring", err=True)
+        sys.exit(1)
+
+    key_name = _ADAPTER_TO_KEY_NAME[adapter]
+    try:
+        store_key(key_name, api_key)
+        click.echo(f"✅ API key for '{adapter}' stored securely.")
+    except Exception as exc:
+        click.echo(f"Error storing key: {exc}", err=True)
+        sys.exit(1)
+
+
+@cli.command("get-key")
+@click.argument("adapter", type=click.Choice(list(_ADAPTER_TO_KEY_NAME.keys())))
+def get_key(adapter: str) -> None:
+    """Check whether an API key is stored for an adapter.
+
+    For security, the key value is NOT displayed — only its presence.
+    """
+    try:
+        from refchecker.core.key_store import load_key
+    except ImportError:
+        click.echo("Error: 'keyring' package is required.", err=True)
+        sys.exit(1)
+
+    key_name = _ADAPTER_TO_KEY_NAME[adapter]
+    value = load_key(key_name)
+    if value is not None:
+        masked = value[:4] + "****" + value[-4:] if len(value) > 8 else "****"
+        click.echo(f"🔑 Key for '{adapter}': {masked} (stored)")
+    else:
+        click.echo(f"ℹ️  No key stored for '{adapter}'.")
+
+
+@cli.command("delete-key")
+@click.argument("adapter", type=click.Choice(list(_ADAPTER_TO_KEY_NAME.keys())))
+def delete_key(adapter: str) -> None:
+    """Remove a stored API key for an adapter."""
+    try:
+        from refchecker.core.key_store import delete_key as _delete_key
+    except ImportError:
+        click.echo("Error: 'keyring' package is required.", err=True)
+        sys.exit(1)
+
+    key_name = _ADAPTER_TO_KEY_NAME[adapter]
+    deleted = _delete_key(key_name)
+    if deleted:
+        click.echo(f"🗑️  Key for '{adapter}' deleted.")
+    else:
+        click.echo(f"ℹ️  No key to delete for '{adapter}'.")
+
+
+@cli.command("list-keys")
+def list_keys() -> None:
+    """List all adapters and their key storage status."""
+    try:
+        from refchecker.core.key_store import list_keys as _list_keys
+    except ImportError:
+        click.echo("Error: 'keyring' package is required.", err=True)
+        sys.exit(1)
+
+    keys = _list_keys()
+    click.echo("Adapter Key Status:")
+    click.echo("-" * 40)
+    for entry in keys:
+        status = "🔑 stored" if entry.has_key else "—  none"
+        click.echo(f"  {entry.adapter_name:<12} {status}")
+    click.echo()
+    click.echo("Use 'refchecker set-key <adapter> <key>' to store a key.")
 
 
 @cli.command()

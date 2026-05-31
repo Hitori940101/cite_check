@@ -3,11 +3,13 @@
 Uses Pydantic Settings for type-safe configuration with
 environment variable and .env file support.
 
-API keys are optional — the tool works out-of-box with free tiers.
-Keys are stored per-adapter and can be configured via:
-1. Environment variables (REFCHECKER_<ADAPTER>_API_KEY)
-2. Settings dialog (GUI)
-3. CLI flags
+API keys are resolved in priority order:
+1. Environment variables (REFCHECKER_<FIELD_NAME>) — for CI/CD
+2. Encrypted key store (OS keyring via keyring lib) — for interactive use
+3. None — free tier is used
+
+The tool works out-of-box with free tiers. Keys unlock higher
+rate limits or additional features.
 """
 
 from pathlib import Path
@@ -15,6 +17,10 @@ from typing import Optional
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from refchecker.core.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 class AdapterKeys(BaseSettings):
@@ -33,7 +39,7 @@ class AdapterKeys(BaseSettings):
         extra="ignore",
     )
 
-    # Adapter API keys
+    # Adapter API keys (from env vars; encrypted store is checked at resolution)
     crossref_mailto: str = "refchecker@example.com"
     s2_api_key: Optional[str] = None
     openalex_api_key: Optional[str] = None
@@ -78,17 +84,21 @@ class RefCheckerConfig(BaseSettings):
     def get_adapter_config(self, adapter_name: str) -> dict:
         """Get configuration dict for a specific adapter.
 
+        Resolves API keys with priority: env var → encrypted store → None.
+
         Args:
             adapter_name: Adapter identifier (e.g. "crossref", "s2").
 
         Returns:
             Dict with adapter-specific configuration.
         """
+        from refchecker.core.key_store import resolve_key
+
         key_map = {
             "crossref": {"mailto": self.adapters.crossref_mailto},
-            "s2": {"api_key": self.adapters.s2_api_key},
-            "openalex": {"api_key": self.adapters.openalex_api_key},
-            "aminer": {"api_key": self.adapters.aminer_api_key},
+            "s2": {"api_key": resolve_key("s2_api_key", self.adapters.s2_api_key)},
+            "openalex": {"api_key": resolve_key("openalex_api_key", self.adapters.openalex_api_key)},
+            "aminer": {"api_key": resolve_key("aminer_api_key", self.adapters.aminer_api_key)},
             "baidu": {},
             "cnki": {},
         }

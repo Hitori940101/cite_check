@@ -35,8 +35,9 @@ dependencies = [
     "httpx>=0.28",
     # API clients
     "habanero>=2.3",
-    "semanticscholar>=0.8",
     "pyalex>=0.14",
+    # Encrypted key storage
+    "keyring>=25.0",
     # CLI
     "click>=8.1",
     # Export
@@ -129,9 +130,9 @@ disallow_untyped_defs = true
 module = [
     "bibtexparser.*",
     "habanero.*",
-    "semanticscholar.*",
     "pyalex.*",
     "rapidfuzz.*",
+    "keyring.*",
 ]
 ignore_missing_imports = true
 
