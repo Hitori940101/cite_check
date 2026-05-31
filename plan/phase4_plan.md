@@ -384,9 +384,26 @@
 
 ---
 
-### Task 4.7: GUI 测试补齐 (P2)
+### Task 4.7: GUI 测试补齐 (P0 — 必须完成)
 
-**目标**: GUI 模块覆盖率从 ~0% 提升到可接受水平
+> **⚠️ 关键发现 (Task 4.0 基线分析)**: GUI 代码占总量 30% (591/1973 stmts)。
+> 即使非 GUI 代码 100% 覆盖，总分也仅 70%，**不可能达到 80% 目标**。
+> 因此 GUI 测试从 P2 提升至 P0，必须在 Phase 4 中完成。
+
+**目标**: GUI 模块覆盖率从 ~0% 提升到 ≥50%（覆盖至少 296 stmts）
+
+**前置修复**: `tests/unit/test_gui.py` 的 macOS 显示检测 Bug
+```python
+# 当前 (有 Bug):
+_HAS_DISPLAY = os.environ.get("DISPLAY") or sys.platform == "win32"
+
+# 修复为:
+_HAS_DISPLAY = (
+    os.environ.get("DISPLAY")
+    or os.environ.get("QT_QPA_PLATFORM") == "offscreen"
+    or sys.platform in ("win32", "darwin")
+)
+```
 
 **策略**: 使用 `pytest-qt` + `QT_QPA_PLATFORM=offscreen` 在无头环境运行
 
@@ -487,6 +504,9 @@ Session 7:  Task 4.7 (GUI 测试补齐，如有余力)
 
 ## 4. 覆盖率提升预测
 
+> **⚠️ 基线分析结论**: GUI 代码 591 stmts (30%)。非 GUI 代码最多覆盖 1382 stmts = 70%。
+> 要达到 80% (1578 stmts)，必须额外覆盖 ≥196 GUI stmts。Task 4.7 为硬性要求。
+
 ```
 29%  ──── 基线 (Phase 3 完成时)
   │
@@ -494,16 +514,16 @@ Session 7:  Task 4.7 (GUI 测试补齐，如有余力)
   ├─ +Task 4.2 (Adapters)        → ~52%
   ├─ +Task 4.3 (Config/Log/Exc)  → ~57%
   ├─ +Task 4.4 (CLI)             → ~67%
-  ├─ +Task 4.5 (Reporter)        → ~70%
-  ├─ +Task 4.6 (Cache)           → ~73%
-  ├─ +Task 4.7 (GUI)             → ~82%
+  ├─ +Task 4.5 (Reporter)        → ~70%   ← 非GUI极限 ≈70%
+  ├─ +Task 4.6 (Cache)           → ~71%
+  ├─ +Task 4.7 (GUI)             → ~82%   ← 必须覆盖 ≥196 GUI stmts
   │
 80%  ──── 目标线 ✅
   │
   └─ +Task 4.8 (文档，不计覆盖率)
 ```
 
-> 注: 覆盖率百分比为估算值，实际取决于新增代码量和被测代码行数。关键策略是优先覆盖 P0 模块 (cli 207 + exporter 107 = 314 stmts)，这些贡献最大。
+> 注: 覆盖率百分比为估算值。Task 4.7 的 GUI 测试是唯一能让总分越过 80% 的途径。
 
 ---
 
