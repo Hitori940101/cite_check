@@ -3,7 +3,7 @@
 Runs the VerificationEngine in a background thread and emits
 progress/result signals back to the GUI thread.
 
-Uses qasync to bridge asyncio with Qt's event loop.
+Emits individual VerificationResult per reference for incremental display.
 """
 
 from pathlib import Path
@@ -22,13 +22,15 @@ class VerifyWorker(QThread):
     """Background thread for citation verification.
 
     Signals:
-        progress(int, int): Emitted after each reference is verified (current, total).
+        progress(int, int, object): Emitted after each reference is verified.
+            (current, total, VerificationResult) — carries the result for
+            incremental row updates in the GUI.
         result_ready(list): Emitted with all VerificationResult when complete.
         error(str): Emitted if an error occurs.
         rate_limited(str): Emitted when an adapter hits a rate limit.
     """
 
-    progress = Signal(int, int)  # current, total
+    progress = Signal(int, int, object)  # current, total, VerificationResult
     result_ready = Signal(list)  # list[VerificationResult]
     error = Signal(str)
     rate_limited = Signal(str)  # adapter name
@@ -71,7 +73,8 @@ class VerifyWorker(QThread):
         def on_progress(idx: int, result: VerificationResult) -> None:
             nonlocal completed
             completed += 1
-            self.progress.emit(completed, total)
+            # Emit both counts and the individual result for incremental display
+            self.progress.emit(completed, total, result)
 
             # Check for rate-limit errors and emit signal
             for match in result.matches:

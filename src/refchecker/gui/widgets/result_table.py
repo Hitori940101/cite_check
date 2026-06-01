@@ -5,9 +5,16 @@ Displays verification results in a color-coded QTableWidget:
 - Yellow: Suspicious (score 0.60–0.84)
 - Red: Likely Fabricated (score < 0.60)
 - Blue: Unable to Verify
+- Gray: Pending (not yet verified)
 
-Provides right-click context menu for copy, open URL, and export.
+Supports:
+- Checkbox column for selecting which references to verify
+- Pre-verification display (PENDING status) immediately after file import
+- Incremental row updates as individual verifications complete
+- Right-click context menu for copy, open URL, and export.
 """
+
+from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QAction, QColor
@@ -18,10 +25,24 @@ from PySide6.QtWidgets import (
     QTableWidgetItem,
 )
 
-from refchecker.core.models import VerificationResult, VerificationStatus
+from refchecker.core.models import (
+    ReferenceItem,
+    VerificationResult,
+    VerificationStatus,
+)
 
-# Column definitions
-_COLUMNS = ["#", "Status", "Score", "Title", "Authors", "Year", "Best Source"]
+# Column definitions (checkbox col 0 + original 7 columns)
+_COLUMNS = ["", "#", "Status", "Score", "Title", "Authors", "Year", "Best Source"]
+
+# Column index constants for clarity
+COL_CHECK = 0
+COL_NUM = 1
+COL_STATUS = 2
+COL_SCORE = 3
+COL_TITLE = 4
+COL_AUTHORS = 5
+COL_YEAR = 6
+COL_SOURCE = 7
 
 # Status colors
 _STATUS_BG = {
@@ -44,6 +65,11 @@ _STATUS_FG = {
 class ResultTableWidget(QTableWidget):
     """Table widget displaying verification results with color coding.
 
+    Supports three states:
+    1. Empty — no data loaded
+    2. Pre-verification — references shown with PENDING status and checkboxes
+    3. Verified — rows updated incrementally with verification results
+
     Signals:
         export_requested: Emitted when user requests export from context menu.
     """
@@ -52,6 +78,7 @@ class ResultTableWidget(QTableWidget):
 
     def __init__(self, parent: object = None) -> None:
         super().__init__(0, len(_COLUMNS), parent)
+        self._references: list[ReferenceItem] = []
         self._results: list[VerificationResult] = []
         self._setup_ui()
 
@@ -61,22 +88,66 @@ class ResultTableWidget(QTableWidget):
         self.setAlternatingRowColors(True)
         self.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)  # type: ignore[name-defined]
+        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.customContextMenuRequested.connect(self._show_context_menu)
 
         header = self.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
-        header.resizeSection(0, 40)
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
-        header.resizeSection(1, 60)
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
-        header.resizeSection(2, 60)
-        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
-        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
-        header.setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)
-        header.resizeSection(5, 50)
-        header.setSectionResizeMode(6, QHeaderView.ResizeMode.Fixed)
-        header.resizeSection(6, 100)
+        # Col 0: Checkbox
+        header.setSectionResizeMode(COL_CHECK, QHeaderView.ResizeMode.Fixed)
+        header.resizeSection(COL_CHECK, 30)
+        # Col 1: #
+        header.setSectionResizeMode(COL_NUM, QHeaderView.ResizeMode.Fixed)
+        header.resizeSection(COL_NUM, 40)
+        # Col 2: Status
+        header.setSectionResizeMode(COL_STATUS, QHeaderView.ResizeMode.Fixed)
+        header.resizeSection(COL_STATUS, 60)
+        # Col 3: Score
+        header.setSectionResizeMode(COL_SCORE, QHeaderView.ResizeMode.Fixed)
+        header.resizeSection(COL_SCORE, 60)
+        # Col 4: Title
+        header.setSectionResizeMode(COL_TITLE, QHeaderView.ResizeMode.Stretch)
+        # Col 5: Authors
+        header.setSectionResizeMode(COL_AUTHORS, QHeaderView.ResizeMode.Stretch)
+        # Col 6: Year
+        header.setSectionResizeMode(COL_YEAR, QHeaderView.ResizeMode.Fixed)
+        header.resizeSection(COL_YEAR, 50)
+        # Col 7: Best Source
+        header.setSectionResizeMode(COL_SOURCE, QHeaderView.ResizeMode.Fixed)
+        header.resizeSection(COL_SOURCE, 100)
+
+    # ------------------------------------------------------------------
+    # Pre-verification display
+    # ------------------------------------------------------------------
+
+    def set_references(self, references: list[ReferenceItem]) -> None:
+        """Populate table with unverified references (PENDING status).
+
+        Called immediately after file parsing, before verification starts.
+        All checkboxes are checked by default.
+
+        Args:
+            references: List of parsed reference items.
+        """
+        self._references = list(references)
+        self._results = []
+        self.setRowCount(len(references))
+
+        for row, ref in enumerate(references):
+            pending = VerificationResult(reference=ref)
+            self._results.append(pending)
+            self._populate_row(row, pending)
+
+    def get_references(self) -> list[ReferenceItem]:
+        """Get the current reference items.
+
+        Returns:
+            List of ReferenceItem.
+        """
+        return self._references
+
+    # ------------------------------------------------------------------
+    # Full results (backward compatible)
+    # ------------------------------------------------------------------
 
     def set_results(self, results: list[VerificationResult]) -> None:
         """Populate the table with verification results.
@@ -84,7 +155,8 @@ class ResultTableWidget(QTableWidget):
         Args:
             results: List of verification results to display.
         """
-        self._results = results
+        self._results = list(results)
+        self._references = [r.reference for r in results]
         self.setRowCount(len(results))
 
         for row, result in enumerate(results):
@@ -98,6 +170,72 @@ class ResultTableWidget(QTableWidget):
         """
         return self._results
 
+    # ------------------------------------------------------------------
+    # Incremental row update
+    # ------------------------------------------------------------------
+
+    def update_row(self, row: int, result: VerificationResult) -> None:
+        """Update a single row with verification result.
+
+        Called incrementally as each reference finishes verification.
+        Preserves the checkbox state from the existing row.
+
+        Args:
+            row: Table row index (0-based).
+            result: Verification result for this row.
+        """
+        if row < 0 or row >= self.rowCount():
+            return
+
+        # Preserve checkbox state
+        check_item = self.item(row, COL_CHECK)
+        check_state = check_item.checkState() if check_item else Qt.CheckState.Checked
+
+        # Update data
+        if row < len(self._results):
+            self._results[row] = result
+        self._populate_row(row, result)
+
+        # Restore checkbox state
+        new_check = self.item(row, COL_CHECK)
+        if new_check:
+            new_check.setCheckState(check_state)
+
+    # ------------------------------------------------------------------
+    # Checkbox selection
+    # ------------------------------------------------------------------
+
+    def get_selected_indices(self) -> list[int]:
+        """Return indices of rows whose checkboxes are checked.
+
+        Returns:
+            List of row indices (0-based) selected for verification.
+        """
+        selected: list[int] = []
+        for row in range(self.rowCount()):
+            item = self.item(row, COL_CHECK)
+            if item and item.checkState() == Qt.CheckState.Checked:
+                selected.append(row)
+        return selected
+
+    def select_all(self) -> None:
+        """Check all row checkboxes."""
+        for row in range(self.rowCount()):
+            item = self.item(row, COL_CHECK)
+            if item:
+                item.setCheckState(Qt.CheckState.Checked)
+
+    def deselect_all(self) -> None:
+        """Uncheck all row checkboxes."""
+        for row in range(self.rowCount()):
+            item = self.item(row, COL_CHECK)
+            if item:
+                item.setCheckState(Qt.CheckState.Unchecked)
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
     def _populate_row(self, row: int, result: VerificationResult) -> None:
         """Fill a single table row with result data.
 
@@ -109,18 +247,40 @@ class ResultTableWidget(QTableWidget):
         bg = _STATUS_BG.get(result.status, _STATUS_BG[VerificationStatus.PENDING])
         fg = _STATUS_FG.get(result.status, _STATUS_FG[VerificationStatus.PENDING])
 
-        items = [
-            self._make_item(str(row + 1), bg, fg),
-            self._make_item(result.status.symbol, bg, fg),
-            self._make_item(f"{result.best_score:.2f}", bg, fg),
-            self._make_item(ref.title, bg, fg),
-            self._make_item(ref.display_authors, bg, fg),
-            self._make_item(str(ref.year or ""), bg, fg),
-            self._make_item(self._find_best_source(result), bg, fg),
+        # Col 0: Checkbox
+        check_item = QTableWidgetItem()
+        check_item.setFlags(Qt.ItemFlag.ItemIsUserCheckable | Qt.ItemFlag.ItemIsEnabled)
+        check_item.setCheckState(Qt.CheckState.Checked)
+        check_item.setBackground(bg)
+        self.setItem(row, COL_CHECK, check_item)
+
+        # Col 1-7: Data columns
+        data_items = [
+            self._make_item(str(row + 1), bg, fg),                          # #
+            self._make_item(result.status.symbol, bg, fg),                   # Status
+            self._make_item(self._format_score(result), bg, fg),             # Score
+            self._make_item(ref.title, bg, fg),                              # Title
+            self._make_item(ref.display_authors, bg, fg),                    # Authors
+            self._make_item(str(ref.year or ""), bg, fg),                    # Year
+            self._make_item(self._find_best_source(result), bg, fg),         # Best Source
         ]
 
-        for col, item in enumerate(items):
-            self.setItem(row, col, item)
+        for col_offset, item in enumerate(data_items):
+            self.setItem(row, COL_NUM + col_offset, item)
+
+    @staticmethod
+    def _format_score(result: VerificationResult) -> str:
+        """Format the score for display.
+
+        Args:
+            result: Verification result.
+
+        Returns:
+            Formatted score string.
+        """
+        if result.status == VerificationStatus.PENDING:
+            return "--"
+        return f"{result.best_score:.2f}"
 
     def _make_item(
         self,

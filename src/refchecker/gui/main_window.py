@@ -39,6 +39,7 @@ from refchecker.adapters.openalex_adapter import OpenAlexAdapter
 from refchecker.adapters.s2_adapter import S2Adapter
 from refchecker.config import load_config
 from refchecker.core.logging import get_logger
+from refchecker.core.models import ReferenceItem, VerificationResult
 from refchecker.core.parser import parse_file
 from refchecker.engine import VerificationEngine
 
@@ -53,6 +54,9 @@ _ADAPTER_REGISTRY = {
     "cnki": CNKIAdapter,
 }
 
+# Adapters shown as checkboxes in the UI
+_UI_ADAPTERS = ["crossref", "s2", "openalex", "aminer", "baidu"]
+
 
 class MainWindow(QMainWindow):
     """Main application window for RefChecker."""
@@ -62,7 +66,8 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("RefChecker — Citation Verification")
         self.setMinimumSize(800, 600)
         self._worker: Optional[object] = None
-        self._references: list = []
+        self._references: list[ReferenceItem] = []
+        self._selected_indices: list[int] = []
         self._setup_ui()
 
     def _setup_ui(self) -> None:
@@ -114,7 +119,7 @@ class MainWindow(QMainWindow):
 
         self._adapter_checks: dict[str, QCheckBox] = {}
         config = load_config()
-        for name in ["crossref", "s2", "openalex", "aminer"]:
+        for name in _UI_ADAPTERS:
             check = QCheckBox(name)
             check.setChecked(config.is_adapter_enabled(name))
             self._adapter_checks[name] = check
@@ -164,6 +169,10 @@ class MainWindow(QMainWindow):
             self._statusbar.showMessage(f"Loaded {count} references from {path.name}")
             self._verify_btn.setEnabled(count > 0)
             self._file_drop.setHidden(True)
+
+            # Immediately show references in the result table
+            self._result_table.set_references(self._references)
+            self._export_btn.setEnabled(False)
         except Exception as exc:
             QMessageBox.critical(self, "Parse Error", f"Failed to parse file:\n{exc}")
 
@@ -188,6 +197,15 @@ class MainWindow(QMainWindow):
         if not self._references:
             return
 
+        # Get only the references the user has checked
+        selected_indices = self._result_table.get_selected_indices()
+        if not selected_indices:
+            QMessageBox.warning(self, "No Selection", "Please select at least one reference to verify.")
+            return
+
+        selected_refs = [self._references[i] for i in selected_indices]
+        self._selected_indices = selected_indices
+
         adapters = self._build_adapters()
         if not adapters:
             QMessageBox.warning(self, "No Adapters", "Please enable at least one adapter.")
@@ -196,7 +214,7 @@ class MainWindow(QMainWindow):
         engine = VerificationEngine(adapters)
 
         from refchecker.gui.workers.verify_worker import VerifyWorker
-        self._worker = VerifyWorker(self._references, engine, parent=self)
+        self._worker = VerifyWorker(selected_refs, engine, parent=self)
         self._worker.progress.connect(self._on_progress)
         self._worker.result_ready.connect(self._on_results_ready)
         self._worker.error.connect(self._on_error)
@@ -219,22 +237,34 @@ class MainWindow(QMainWindow):
         self._cancel_btn.setEnabled(False)
         self._statusbar.showMessage("Verification cancelled")
 
-    def _on_progress(self, current: int, total: int) -> None:
-        """Handle progress update from worker.
+    def _on_progress(self, current: int, total: int, result: object) -> None:
+        """Handle incremental progress update from worker.
+
+        Updates the progress bar and the individual table row.
 
         Args:
-            current: Completed count.
+            current: Completed count (1-based).
             total: Total count.
+            result: VerificationResult for the row that just completed.
         """
         self._progress.set_progress(current, total)
+
+        if isinstance(result, VerificationResult) and self._selected_indices:
+            # Map worker index (1-based) back to table row
+            worker_idx = current - 1
+            if worker_idx < len(self._selected_indices):
+                table_row = self._selected_indices[worker_idx]
+                self._result_table.update_row(table_row, result)
 
     def _on_results_ready(self, results: list) -> None:
         """Handle completed verification.
 
+        Results are already in the table via incremental updates.
+        This handler just updates UI state.
+
         Args:
-            results: List of VerificationResult.
+            results: List of VerificationResult (complete batch).
         """
-        self._result_table.set_results(results)
         self._progress.set_complete(len(results))
         self._verify_btn.setEnabled(True)
         self._cancel_btn.setEnabled(False)

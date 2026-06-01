@@ -79,7 +79,7 @@ class TestResultTable:
         table = ResultTableWidget()
         qtbot.addWidget(table)
         table.set_results([_make_result(status=VerificationStatus.VERIFIED)])
-        status_item = table.item(0, 1)
+        status_item = table.item(0, 2)  # Col 2 = Status (col 0=checkbox, col 1=#, col 2=status)
         assert status_item is not None
         assert "✅" in status_item.text()
 
