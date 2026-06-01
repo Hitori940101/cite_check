@@ -30,9 +30,13 @@ from refchecker.core.models import (
     VerificationResult,
     VerificationStatus,
 )
+from refchecker.gui.i18n import t
 
 # Column definitions (checkbox col 0 + original 7 columns)
 _COLUMNS = ["", "#", "Status", "Score", "Title", "Authors", "Year", "Best Source"]
+
+# i18n keys for column headers
+_COL_I18N_KEYS = ["", "col.num", "col.status", "col.score", "col.title", "col.authors", "col.year", "col.source"]
 
 # Column index constants for clarity
 COL_CHECK = 0
@@ -84,7 +88,7 @@ class ResultTableWidget(QTableWidget):
 
     def _setup_ui(self) -> None:
         """Configure table appearance."""
-        self.setHorizontalHeaderLabels(_COLUMNS)
+        self._update_header_labels()
         self.setAlternatingRowColors(True)
         self.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
@@ -92,28 +96,32 @@ class ResultTableWidget(QTableWidget):
         self.customContextMenuRequested.connect(self._show_context_menu)
 
         header = self.horizontalHeader()
-        # Col 0: Checkbox
         header.setSectionResizeMode(COL_CHECK, QHeaderView.ResizeMode.Fixed)
         header.resizeSection(COL_CHECK, 30)
-        # Col 1: #
         header.setSectionResizeMode(COL_NUM, QHeaderView.ResizeMode.Fixed)
         header.resizeSection(COL_NUM, 40)
-        # Col 2: Status
         header.setSectionResizeMode(COL_STATUS, QHeaderView.ResizeMode.Fixed)
         header.resizeSection(COL_STATUS, 60)
-        # Col 3: Score
         header.setSectionResizeMode(COL_SCORE, QHeaderView.ResizeMode.Fixed)
         header.resizeSection(COL_SCORE, 60)
-        # Col 4: Title
         header.setSectionResizeMode(COL_TITLE, QHeaderView.ResizeMode.Stretch)
-        # Col 5: Authors
         header.setSectionResizeMode(COL_AUTHORS, QHeaderView.ResizeMode.Stretch)
-        # Col 6: Year
         header.setSectionResizeMode(COL_YEAR, QHeaderView.ResizeMode.Fixed)
         header.resizeSection(COL_YEAR, 50)
-        # Col 7: Best Source
         header.setSectionResizeMode(COL_SOURCE, QHeaderView.ResizeMode.Fixed)
         header.resizeSection(COL_SOURCE, 100)
+
+    def _update_header_labels(self) -> None:
+        """Update column headers to current language."""
+        labels = [t(k) if k else "" for k in _COL_I18N_KEYS]
+        self.setHorizontalHeaderLabels(labels)
+
+    def update_language(self) -> None:
+        """Refresh all UI text for the current language."""
+        self._update_header_labels()
+        # Re-populate all rows to refresh status symbols and score formatting
+        for row, result in enumerate(self._results):
+            self._populate_row(row, result)
 
     # ------------------------------------------------------------------
     # Pre-verification display
@@ -327,7 +335,7 @@ class ResultTableWidget(QTableWidget):
         """
         menu = QMenu(self)
 
-        export_action = QAction("Export Results...", self)
+        export_action = QAction(t("menu.export"), self)
         export_action.triggered.connect(self.export_requested.emit)
         menu.addAction(export_action)
 
@@ -337,7 +345,7 @@ class ResultTableWidget(QTableWidget):
             result = self._results[row]
             for match in result.matches:
                 if match.source_url:
-                    open_action = QAction(f"Open in Browser ({match.adapter_name})", self)
+                    open_action = QAction(t("menu.open_browser", adapter=match.adapter_name), self)
                     url = match.source_url
 
                     def _open_url(u: str = url) -> None:

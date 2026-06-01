@@ -14,6 +14,13 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from refchecker.gui.i18n import t
+    QFileDialog,
+    QFrame,
+    QLabel,
+    QVBoxLayout,
+)
+
 _ACCEPTED_EXTENSIONS = {".bib", ".txt"}
 _DROP_STYLE = """
     FileDropWidget {
@@ -72,6 +79,14 @@ class FileDropWidget(QFrame):
 
         layout.addLayout(inner)
 
+    def update_language(self) -> None:
+        """Update labels to current language."""
+        # Update labels by finding them in the layout
+        inner = self.layout().itemAt(0).layout()
+        if inner and inner.count() >= 3:
+            inner.itemAt(1).widget().setText(t("drop.main"))
+            inner.itemAt(2).widget().setText(t("drop.sub"))
+
     # --- Drag-and-drop ---
 
     def dragEnterEvent(self, event: object) -> None:  # type: ignore[override]
@@ -127,10 +142,10 @@ class FileDropWidget(QFrame):
         if not isinstance(event, QMouseEvent):
             return
 
-        file_filter = "Reference Files (*.bib *.txt);;BibTeX (*.bib);;Text (*.txt);;All Files (*)"
+        file_filter = t("drop.filter")
         path, _ = QFileDialog.getOpenFileName(
             self,
-            "Open Reference File",
+            t("drop.dialog_title"),
             "",
             file_filter,
         )
