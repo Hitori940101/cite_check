@@ -73,7 +73,7 @@ class RefCheckerConfig(BaseSettings):
 
     # Which adapters to enable (comma-separated or list)
     enabled_adapters: list[str] = Field(
-        default=["crossref", "s2", "openalex", "aminer"],
+        default=["crossref", "s2", "openalex", "aminer", "baidu", "arxiv", "scholar"],
         description="List of adapter names to use for verification.",
     )
 
@@ -101,6 +101,8 @@ class RefCheckerConfig(BaseSettings):
             "aminer": {"api_key": resolve_key("aminer_api_key", self.adapters.aminer_api_key)},
             "baidu": {},
             "cnki": {},
+            "arxiv": {},
+            "scholar": {},
         }
         return key_map.get(adapter_name, {})
 

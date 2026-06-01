@@ -32,11 +32,13 @@ from PySide6.QtWidgets import (
 )
 
 from refchecker.adapters.aminer_adapter import AMinerAdapter
+from refchecker.adapters.arxiv_adapter import ArxivAdapter
 from refchecker.adapters.baidu_adapter import BaiduAdapter
 from refchecker.adapters.cnki_adapter import CNKIAdapter
 from refchecker.adapters.crossref_adapter import CrossrefAdapter
 from refchecker.adapters.openalex_adapter import OpenAlexAdapter
 from refchecker.adapters.s2_adapter import S2Adapter
+from refchecker.adapters.scholar_adapter import ScholarAdapter
 from refchecker.config import load_config
 from refchecker.core.logging import get_logger
 from refchecker.core.models import ReferenceItem, VerificationResult
@@ -52,10 +54,12 @@ _ADAPTER_REGISTRY = {
     "aminer": AMinerAdapter,
     "baidu": BaiduAdapter,
     "cnki": CNKIAdapter,
+    "arxiv": ArxivAdapter,
+    "scholar": ScholarAdapter,
 }
 
 # Adapters shown as checkboxes in the UI
-_UI_ADAPTERS = ["crossref", "s2", "openalex", "aminer", "baidu"]
+_UI_ADAPTERS = ["crossref", "s2", "openalex", "aminer", "baidu", "arxiv", "scholar"]
 
 
 class MainWindow(QMainWindow):

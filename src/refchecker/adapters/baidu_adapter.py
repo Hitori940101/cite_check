@@ -80,6 +80,7 @@ class BaiduAdapter(VerificationAdapter):
         timeout: float = 30.0,
     ) -> None:
         super().__init__(name="baidu", api_key=None, timeout=timeout)
+        self._min_request_interval = 3.0
 
     async def verify_single(
         self,
@@ -95,6 +96,8 @@ class BaiduAdapter(VerificationAdapter):
         Returns:
             AdapterMatch with results.
         """
+        await self.throttle()
+
         params = {
             "wd": reference.title,
             "rsv_bp": "0",

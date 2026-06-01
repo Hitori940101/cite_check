@@ -4,11 +4,13 @@ All verification adapters inherit from VerificationAdapter, which provides:
 - A common verify() interface
 - Automatic exponential backoff with jitter on retries
 - Retry-After header support (mandatory for Semantic Scholar)
+- Request throttling for scraping-based adapters
 - Structured logging of verification attempts
 """
 
 import asyncio
 import random
+import time
 from abc import ABC, abstractmethod
 from typing import Any
 
@@ -50,6 +52,23 @@ class VerificationAdapter(ABC):
         self.name = name
         self.api_key = api_key
         self.timeout = timeout
+        self._last_request_time: float = 0.0
+        self._min_request_interval: float = 0.0  # Override in subclasses for throttling
+
+    async def throttle(self) -> None:
+        """Enforce minimum interval between requests.
+
+        Subclasses should set ``_min_request_interval`` to control
+        throttle timing (e.g. 3.0 for 3+ seconds between requests).
+        Uses a random jitter of 0–2 seconds on top of the base interval.
+        """
+        if self._min_request_interval <= 0:
+            return
+        delay = self._min_request_interval + random.uniform(0, 2.0)
+        elapsed = time.monotonic() - self._last_request_time
+        if elapsed < delay:
+            await asyncio.sleep(delay - elapsed)
+        self._last_request_time = time.monotonic()
 
     @abstractmethod
     async def verify_single(
