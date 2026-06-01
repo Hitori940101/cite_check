@@ -15,11 +15,6 @@ from PySide6.QtWidgets import (
 )
 
 from refchecker.gui.i18n import t
-    QFileDialog,
-    QFrame,
-    QLabel,
-    QVBoxLayout,
-)
 
 _ACCEPTED_EXTENSIONS = {".bib", ".txt"}
 _DROP_STYLE = """
