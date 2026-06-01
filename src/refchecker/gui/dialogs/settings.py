@@ -6,6 +6,7 @@ Per-adapter API key fields with:
 - Adapter enable/disable checkboxes
 - Proxy configuration
 - Inline "How to apply" hints for sources requiring keys
+- Chinese/English i18n support
 """
 
 from PySide6.QtCore import Qt
@@ -24,20 +25,20 @@ from PySide6.QtWidgets import (
 )
 
 from refchecker.core.logging import get_logger
+from refchecker.gui.i18n import t
 
 logger = get_logger(__name__)
 
-# Adapter metadata: (display_name, key_name, hint, requires_key)
+# Adapter metadata: (display_name, key_name, hint_i18n_key, requires_key)
 _ADAPTER_INFO = [
-    ("Crossref", "crossref", "Free — no key needed. Uses mailto for polite pool.", False),
-    ("Semantic Scholar", "s2", "Free tier: ~100 req/5min. With key: 1 RPS guaranteed.\n"
-     "Apply at: https://www.semanticscholar.org/product/api", False),
-    ("OpenAlex", "openalex", "Free key recommended: 100K credits/day.\n"
-     "Apply at: https://openalex.org/", True),
-    ("AMiner", "aminer", "Free tier available. Key unlocks higher limits.\n"
-     "Apply at: https://open.aminer.cn/", False),
-    ("Baidu Academic", "baidu", "Scraping-based — no API key.", False),
-    ("CNKI", "cnki", "Playwright-based — no API key.", False),
+    ("Crossref", "crossref", "adapter.crossref.desc", False),
+    ("Semantic Scholar", "s2", "adapter.s2.desc", False),
+    ("OpenAlex", "openalex", "adapter.openalex.desc", True),
+    ("AMiner", "aminer", "adapter.aminer.desc", False),
+    ("Baidu Academic", "baidu", "adapter.baidu.desc", False),
+    ("arXiv", "arxiv", "adapter.arxiv.desc", False),
+    ("Scholar", "scholar", "adapter.scholar.desc", False),
+    ("CNKI", "cnki", "adapter.cnki.desc", False),
 ]
 
 
@@ -51,8 +52,6 @@ class SettingsDialog(QDialog):
 
     def __init__(self, parent: object = None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Settings")
-        self.setMinimumWidth(520)
         self._key_fields: dict[str, QLineEdit] = {}
         self._adapter_checks: dict[str, QCheckBox] = {}
         self._setup_ui()
@@ -62,40 +61,41 @@ class SettingsDialog(QDialog):
         """Build the dialog layout."""
         layout = QVBoxLayout(self)
 
-        tabs = QTabWidget()
-        tabs.addTab(self._build_adapters_tab(), "API Keys && Adapters")
-        tabs.addTab(self._build_network_tab(), "Network")
+        self.setWindowTitle(t("settings.title"))
+        self.setMinimumWidth(520)
 
-        layout.addWidget(tabs)
+        self._tabs = QTabWidget()
+        self._adapters_tab = self._build_adapters_tab()
+        self._network_tab = self._build_network_tab()
+        self._tabs.addTab(self._adapters_tab, t("settings.tab.adapters"))
+        self._tabs.addTab(self._network_tab, t("settings.tab.proxy"))
+
+        layout.addWidget(self._tabs)
 
         # Buttons
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
 
-        save_btn = QPushButton("Save")
-        save_btn.clicked.connect(self._on_save)
-        cancel_btn = QPushButton("Cancel")
-        cancel_btn.clicked.connect(self.reject)
+        self._save_btn = QPushButton(t("settings.save"))
+        self._save_btn.clicked.connect(self._on_save)
+        self._cancel_btn = QPushButton(t("settings.cancel"))
+        self._cancel_btn.clicked.connect(self.reject)
 
-        btn_layout.addWidget(save_btn)
-        btn_layout.addWidget(cancel_btn)
+        btn_layout.addWidget(self._save_btn)
+        btn_layout.addWidget(self._cancel_btn)
         layout.addLayout(btn_layout)
 
     def _build_adapters_tab(self) -> QWidget:
-        """Build the adapter settings tab.
-
-        Returns:
-            Widget containing adapter configuration.
-        """
+        """Build the adapter settings tab."""
         widget = QWidget()
         layout = QVBoxLayout(widget)
 
-        for display_name, adapter_name, hint, requires_key in _ADAPTER_INFO:
+        for display_name, adapter_name, hint_key, requires_key in _ADAPTER_INFO:
             group = QGroupBox(display_name)
             group_layout = QVBoxLayout(group)
 
             # Enable checkbox
-            check = QCheckBox("Enabled")
+            check = QCheckBox(t("settings.enabled"))
             check.setChecked(True)
             self._adapter_checks[adapter_name] = check
             group_layout.addWidget(check)
@@ -103,11 +103,11 @@ class SettingsDialog(QDialog):
             # API key field (only for adapters that support keys)
             if adapter_name in ("s2", "openalex", "aminer"):
                 key_row = QHBoxLayout()
-                key_label = QLabel("API Key:")
+                key_label = QLabel(t("settings.key_label"))
                 key_label.setMinimumWidth(60)
 
                 key_field = QLineEdit()
-                key_field.setPlaceholderText("Enter API key (optional)")
+                key_field.setPlaceholderText(t("settings.key_placeholder"))
                 key_field.setEchoMode(QLineEdit.EchoMode.Password)
                 self._key_fields[adapter_name] = key_field
 
@@ -123,7 +123,7 @@ class SettingsDialog(QDialog):
                 )
 
                 # Store button
-                store_btn = QPushButton("Store Securely")
+                store_btn = QPushButton(t("settings.store_btn"))
                 store_btn.clicked.connect(
                     lambda checked, n=adapter_name, f=key_field: self._store_key(n, f)
                 )
@@ -141,7 +141,8 @@ class SettingsDialog(QDialog):
                 group_layout.addLayout(key_row)
 
             # Hint label
-            hint_label = QLabel(hint)
+            hint_text = t(hint_key)
+            hint_label = QLabel(hint_text)
             hint_label.setStyleSheet("color: #888; font-size: 11px;")
             hint_label.setWordWrap(True)
             group_layout.addWidget(hint_label)
@@ -149,10 +150,7 @@ class SettingsDialog(QDialog):
             layout.addWidget(group)
 
         # S2 lifecycle warning
-        warning = QLabel(
-            "⚠️ Semantic Scholar: Keys inactive for 60+ days may be removed. "
-            "Use the tool regularly to keep your key active."
-        )
+        warning = QLabel(t("settings.s2_warning"))
         warning.setStyleSheet("color: #b45309; font-size: 11px; padding: 8px; background: #fef3c7; border-radius: 4px;")
         warning.setWordWrap(True)
         layout.addWidget(warning)
@@ -161,39 +159,35 @@ class SettingsDialog(QDialog):
         return widget
 
     def _build_network_tab(self) -> QWidget:
-        """Build the network/proxy settings tab.
-
-        Returns:
-            Widget containing network configuration.
-        """
+        """Build the network/proxy settings tab."""
         widget = QWidget()
         layout = QVBoxLayout(widget)
 
-        proxy_group = QGroupBox("Proxy Settings")
+        proxy_group = QGroupBox(t("settings.proxy_group"))
         proxy_layout = QVBoxLayout(proxy_group)
 
         self._http_proxy = QLineEdit()
-        self._http_proxy.setPlaceholderText("http://proxy:port (optional)")
-        proxy_layout.addWidget(QLabel("HTTP Proxy:"))
+        self._http_proxy.setPlaceholderText(t("settings.http_proxy_ph"))
+        proxy_layout.addWidget(QLabel(t("settings.proxy_http")))
         proxy_layout.addWidget(self._http_proxy)
 
         self._https_proxy = QLineEdit()
-        self._https_proxy.setPlaceholderText("https://proxy:port (optional)")
-        proxy_layout.addWidget(QLabel("HTTPS Proxy:"))
+        self._https_proxy.setPlaceholderText(t("settings.https_proxy_ph"))
+        proxy_layout.addWidget(QLabel(t("settings.proxy_https")))
         proxy_layout.addWidget(self._https_proxy)
 
         layout.addWidget(proxy_group)
 
-        timeout_group = QGroupBox("Request Settings")
-        timeout_layout = QVBoxLayout(timeout_group)
+        request_group = QGroupBox(t("settings.request_group"))
+        request_layout = QVBoxLayout(request_group)
 
-        self._timeout_spin = self._make_spinbox(5, 120, 30, "Request timeout (seconds):")
-        timeout_layout.addLayout(self._labeled_row("Timeout:", self._timeout_spin))
+        self._timeout_spin = self._make_spinbox(5, 120, 30, t("settings.timeout_tip"))
+        request_layout.addLayout(self._labeled_row(t("settings.timeout_lbl"), self._timeout_spin))
 
-        self._concurrent_spin = self._make_spinbox(1, 10, 3, "Max concurrent requests:")
-        timeout_layout.addLayout(self._labeled_row("Concurrency:", self._concurrent_spin))
+        self._concurrent_spin = self._make_spinbox(1, 10, 3, t("settings.concurrent_tip"))
+        request_layout.addLayout(self._labeled_row(t("settings.concurrent_lbl"), self._concurrent_spin))
 
-        layout.addWidget(timeout_group)
+        layout.addWidget(request_group)
         layout.addStretch()
         return widget
 
@@ -237,36 +231,26 @@ class SettingsDialog(QDialog):
             logger.warning("settings_load_error", error=str(exc))
 
     def _check_key_status(self, adapter_name: str, label: QLabel) -> None:
-        """Check and display whether a key is stored for an adapter.
-
-        Args:
-            adapter_name: Adapter identifier.
-            label: QLabel to update with status.
-        """
+        """Check and display whether a key is stored for an adapter."""
         try:
-            from refchecker.core.key_store import load_key, _key_to_adapter
+            from refchecker.core.key_store import load_key
             key_name = f"{adapter_name}_api_key"
             value = load_key(key_name)
             if value is not None:
-                label.setText("🔑 Stored")
+                label.setText(t("settings.key_stored"))
                 label.setStyleSheet("color: #16a34a; font-weight: bold;")
             else:
-                label.setText("— None")
+                label.setText(t("settings.key_none"))
                 label.setStyleSheet("color: #999;")
         except ImportError:
-            label.setText("⚠ No keyring")
+            label.setText(t("settings.key_no_keyring"))
             label.setStyleSheet("color: #d97706;")
 
     def _store_key(self, adapter_name: str, field: QLineEdit) -> None:
-        """Store an API key from the field into encrypted storage.
-
-        Args:
-            adapter_name: Adapter identifier.
-            field: QLineEdit containing the key value.
-        """
+        """Store an API key from the field into encrypted storage."""
         key_value = field.text().strip()
         if not key_value:
-            QMessageBox.warning(self, "Empty Key", "Please enter an API key before saving.")
+            QMessageBox.warning(self, t("settings.empty_key_title"), t("settings.empty_key_msg"))
             return
 
         try:
@@ -278,20 +262,20 @@ class SettingsDialog(QDialog):
             # Update status label
             status_label = self.findChild(QLabel, f"status_{adapter_name}")
             if status_label:
-                status_label.setText("🔑 Stored")
+                status_label.setText(t("settings.key_stored"))
                 status_label.setStyleSheet("color: #16a34a; font-weight: bold;")
 
-            QMessageBox.information(self, "Key Stored", f"API key for {adapter_name} stored securely.")
+            QMessageBox.information(
+                self, t("settings.key_stored"), t("settings.key_stored_msg", adapter=adapter_name),
+            )
         except ImportError:
-            QMessageBox.critical(self, "Error", "keyring package is required for encrypted storage.")
+            QMessageBox.critical(self, t("settings.error"), t("settings.keyring_required"))
         except Exception as exc:
-            QMessageBox.critical(self, "Error", f"Failed to store key: {exc}")
+            QMessageBox.critical(self, t("settings.error"), t("settings.store_failed", exc=str(exc)))
 
     def _on_save(self) -> None:
         """Save settings and close dialog."""
         try:
-            # For now, adapter enabled states are saved to config
-            # (full persistence would use QSettings or config file)
             self.accept()
         except Exception as exc:
-            QMessageBox.critical(self, "Error", f"Failed to save settings: {exc}")
+            QMessageBox.critical(self, t("settings.error"), t("settings.save_failed", exc=str(exc)))
