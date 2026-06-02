@@ -236,7 +236,7 @@ _ADAPTER_TO_KEY_NAME = {
 
 
 @cli.command("set-key")
-@click.argument("adapter", type=click.Choice(list(_ADAPTER_TO_KEY_NAMES.keys())))
+@click.argument("adapter", type=click.Choice(list(_ADAPTER_TO_KEY_NAME.keys())))
 @click.argument("api_key")
 def set_key(adapter: str, api_key: str) -> None:
     """Store an API key for an adapter (encrypted).
