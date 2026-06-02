@@ -4,6 +4,7 @@ Runs the VerificationEngine in a background thread and emits
 progress/result signals back to the GUI thread.
 
 Emits individual VerificationResult per reference for incremental display.
+Supports cooperative cancellation between reference verifications.
 """
 
 from pathlib import Path
@@ -49,7 +50,9 @@ class VerifyWorker(QThread):
     def run(self) -> None:
         """Execute verification in background thread.
 
-        Runs the async engine using asyncio.run() inside the thread.
+        Verifies references sequentially, checking for cancellation
+        between each one. This allows the user to stop verification
+        and see partial results.
         """
         import asyncio
 
@@ -57,38 +60,56 @@ class VerifyWorker(QThread):
             results = asyncio.run(self._run_verification())
             if not self._is_cancelled:
                 self.result_ready.emit(results)
+            else:
+                # Still emit partial results on cancel
+                self.result_ready.emit(results)
         except Exception as exc:
             logger.error("verify_worker_error", error=str(exc))
             self.error.emit(str(exc))
 
     async def _run_verification(self) -> list[VerificationResult]:
-        """Run the verification pipeline asynchronously.
+        """Run verification sequentially with cancellation checks.
 
         Returns:
-            List of verification results.
+            List of verification results (may be partial if cancelled).
         """
+        import asyncio
+
         total = len(self._references)
-        completed = 0
+        results: list[VerificationResult] = []
 
-        def on_progress(idx: int, result: VerificationResult) -> None:
-            nonlocal completed
-            completed += 1
-            # Emit both counts and the individual result for incremental display
-            self.progress.emit(completed, total, result)
+        for i, ref in enumerate(self._references):
+            if self._is_cancelled:
+                logger.info("verify_worker_cancelled", completed=i, total=total)
+                break
 
-            # Check for rate-limit errors and emit signal
-            for match in result.matches:
-                if match.error and "rate" in match.error.lower():
-                    self.rate_limited.emit(match.adapter_name)
+            try:
+                result = await self._engine.verify_single(ref)
+                results.append(result)
 
-        results = await self._engine.verify_batch(
-            self._references,
-            progress_callback=on_progress,
-        )
+                # Emit progress and check for rate limits
+                self.progress.emit(i + 1, total, result)
+                for match in result.matches:
+                    if match.error and "rate" in match.error.lower():
+                        self.rate_limited.emit(match.adapter_name)
+
+            except Exception as exc:
+                logger.warning("verify_single_error", error=str(exc))
+                # Create an error result so the row still appears
+                results.append(VerificationResult(
+                    reference=ref,
+                    status=None,  # type: ignore[arg-type]
+                    matches=[],
+                    best_score=0.0,
+                ))
 
         return results
 
     def cancel(self) -> None:
-        """Request cancellation of the verification."""
+        """Request cancellation of the verification.
+
+        The running verification will stop after the current reference
+        finishes. Partial results are still emitted via result_ready.
+        """
         self._is_cancelled = True
-        logger.info("verify_worker_cancelled")
+        logger.info("verify_worker_cancel_requested")
