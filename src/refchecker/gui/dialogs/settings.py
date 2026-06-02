@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QTabWidget,
     QVBoxLayout,
     QWidget,
@@ -67,8 +68,8 @@ class SettingsDialog(QDialog):
         self._tabs = QTabWidget()
         self._adapters_tab = self._build_adapters_tab()
         self._network_tab = self._build_network_tab()
-        self._tabs.addTab(self._adapters_tab, t("settings.tab.adapters"))
-        self._tabs.addTab(self._network_tab, t("settings.tab.proxy"))
+        self._tabs.addTab(self._wrap_in_scroll(self._adapters_tab), t("settings.tab.adapters"))
+        self._tabs.addTab(self._wrap_in_scroll(self._network_tab), t("settings.tab.proxy"))
 
         layout.addWidget(self._tabs)
 
@@ -84,6 +85,15 @@ class SettingsDialog(QDialog):
         btn_layout.addWidget(self._save_btn)
         btn_layout.addWidget(self._cancel_btn)
         layout.addLayout(btn_layout)
+
+    @staticmethod
+    def _wrap_in_scroll(widget: QWidget) -> QScrollArea:
+        """Wrap a widget in a QScrollArea for small screens."""
+        scroll = QScrollArea()
+        scroll.setWidget(widget)
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        return scroll
 
     def _build_adapters_tab(self) -> QWidget:
         """Build the adapter settings tab."""
