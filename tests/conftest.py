@@ -1,8 +1,12 @@
 """Shared test fixtures and configuration."""
 
+import os
 from pathlib import Path
 
 import pytest
+
+# Ensure GUI tests run reliably in all environments (headless CI, macOS, etc.)
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
