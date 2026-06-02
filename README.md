@@ -31,13 +31,79 @@ RefChecker validates whether references in `.bib` files or plain text are real b
 
 ## Installation
 
+### macOS
+
+**前置条件**：安装 [Miniconda](https://docs.conda.io/en/latest/miniconda.html) 或 Anaconda。
+
 ```bash
-# Create conda environment
+# 1. 克隆仓库
+git clone <repo-url>
+cd cite_check
+
+# 2. 创建 conda 环境
 conda env create -f environment.yml
 conda activate refchecker
 
-# Install in development mode (all extras)
-pip install -e ".[all]"
+# 3. 安装（含 GUI）
+pip install -e ".[gui]"
+
+# 4. 启动 GUI
+refchecker-gui
+# 或
+python -m refchecker.gui
+```
+
+**macOS 首次启动注意事项**：
+- 如果遇到 "无法打开，因为无法验证开发者" 提示，前往 **系统设置 → 隐私与安全性**，点击 "仍要打开"
+- 确保 conda 环境中安装了 PySide6：`pip install PySide6`
+
+**构建 macOS .app（可选）**：
+
+```bash
+pip install pyinstaller
+pyinstaller refchecker.spec
+# 产物在 dist/RefChecker.app
+```
+
+### Windows
+
+**前置条件**：安装 [Miniconda](https://docs.conda.io/en/latest/miniconda.html)。
+
+```powershell
+# 1. 克隆仓库
+git clone <repo-url>
+cd cite_check
+
+# 2. 创建 conda 环境
+conda env create -f environment.yml
+conda activate refchecker
+
+# 3. 安装（含 GUI）
+pip install -e ".[gui]"
+
+# 4. 启动 GUI
+refchecker-gui.exe
+# 或
+python -m refchecker.gui
+```
+
+**构建 Windows .exe（可选）**：
+
+```powershell
+pip install pyinstaller
+pyinstaller refchecker.spec
+# 产物在 dist\RefChecker.exe（双击即可运行，无需 Python 环境）
+```
+
+> **提示**：编译后的 `.exe` 可分发给没有 Python 环境的 Windows 用户，直接双击运行。
+
+### Linux
+
+```bash
+conda env create -f environment.yml
+conda activate refchecker
+pip install -e ".[gui]"
+refchecker-gui
 ```
 
 ### Optional: Scraping adapters
@@ -200,6 +266,31 @@ ruff check src/ tests/
 # Type check
 mypy src/
 ```
+
+## Building & Distribution
+
+### 构建独立可执行文件
+
+PyInstaller 可将应用打包为独立可执行文件，用户无需安装 Python 即可运行。
+
+```bash
+pip install pyinstaller
+pyinstaller refchecker.spec
+```
+
+| 平台 | 产物 | 说明 |
+|------|------|------|
+| macOS | `dist/RefChecker.app` | 双击打开，可拖入 Applications |
+| Windows | `dist/RefChecker.exe` | 单文件 .exe，双击运行 |
+| Linux | `dist/RefChecker` | 单文件二进制 |
+
+### GitHub Actions CI/CD
+
+推送代码后自动运行：
+- **测试矩阵**：Ubuntu / macOS / Windows × Python 3.11 / 3.12
+- **代码检查**：ruff lint
+- **覆盖率**：codecov 上报
+- **构建产物**：三个平台的可执行文件作为 Artifact 下载
 
 ## License
 
