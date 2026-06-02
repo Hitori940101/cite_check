@@ -74,6 +74,9 @@ all = [
 [project.scripts]
 refchecker = "refchecker.cli.main:cli"
 
+[project.gui-scripts]
+refchecker-gui = "refchecker.gui.app:run_gui"
+
 [project.entry-points."refchecker.adapters"]
 
 [tool.setuptools.packages.find]
