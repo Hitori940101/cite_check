@@ -6,6 +6,8 @@ RefChecker validates whether references in `.bib` files or plain text are real b
 
 **Key differentiator**: Strong Chinese literature support via AMiner API (300M+ papers) and Baidu Academic — a gap no other open-source tool addresses.
 
+[**中文文档**](./README-ZH.md)
+
 ## Features
 
 - **Dual interface**: Desktop GUI (PySide6) and CLI
@@ -31,71 +33,71 @@ RefChecker validates whether references in `.bib` files or plain text are real b
 
 ## Installation
 
+### Prerequisites
+
+Install [Miniconda](https://docs.conda.io/en/latest/miniconda.html) or Anaconda.
+
 ### macOS
 
-**前置条件**：安装 [Miniconda](https://docs.conda.io/en/latest/miniconda.html) 或 Anaconda。
-
 ```bash
-# 1. 克隆仓库
-git clone <repo-url>
+# 1. Clone the repository
+git clone https://github.com/Hitori940101/cite_check.git
 cd cite_check
 
-# 2. 创建 conda 环境
+# 2. Create conda environment
 conda env create -f environment.yml
 conda activate refchecker
 
-# 3. 安装（含 GUI）
+# 3. Install with GUI support
 pip install -e ".[gui]"
 
-# 4. 启动 GUI
+# 4. Launch the GUI
 refchecker-gui
-# 或
+# or
 python -m refchecker.gui
 ```
 
-**macOS 首次启动注意事项**：
-- 如果遇到 "无法打开，因为无法验证开发者" 提示，前往 **系统设置 → 隐私与安全性**，点击 "仍要打开"
-- 确保 conda 环境中安装了 PySide6：`pip install PySide6`
+**macOS first-launch notes**:
+- If you see "cannot be opened because it cannot be verified", go to **System Settings → Privacy & Security** and click "Open Anyway"
+- Make sure PySide6 is installed in the conda environment: `pip install PySide6`
 
-**构建 macOS .app（可选）**：
+**Build macOS .app (optional)**:
 
 ```bash
 pip install pyinstaller
 pyinstaller refchecker.spec
-# 产物在 dist/RefChecker.app
+# Output: dist/RefChecker.app
 ```
 
 ### Windows
 
-**前置条件**：安装 [Miniconda](https://docs.conda.io/en/latest/miniconda.html)。
-
 ```powershell
-# 1. 克隆仓库
-git clone <repo-url>
+# 1. Clone the repository
+git clone https://github.com/Hitori940101/cite_check.git
 cd cite_check
 
-# 2. 创建 conda 环境
+# 2. Create conda environment
 conda env create -f environment.yml
 conda activate refchecker
 
-# 3. 安装（含 GUI）
+# 3. Install with GUI support
 pip install -e ".[gui]"
 
-# 4. 启动 GUI
+# 4. Launch the GUI
 refchecker-gui.exe
-# 或
+# or
 python -m refchecker.gui
 ```
 
-**构建 Windows .exe（可选）**：
+**Build Windows .exe (optional)**:
 
 ```powershell
 pip install pyinstaller
 pyinstaller refchecker.spec
-# 产物在 dist\RefChecker.exe（双击即可运行，无需 Python 环境）
+# Output: dist\RefChecker.exe — double-click to run, no Python needed
 ```
 
-> **提示**：编译后的 `.exe` 可分发给没有 Python 环境的 Windows 用户，直接双击运行。
+> **Tip**: The compiled `.exe` can be distributed to users without Python — just double-click to run.
 
 ### Linux
 
@@ -106,7 +108,7 @@ pip install -e ".[gui]"
 refchecker-gui
 ```
 
-### Optional: Scraping adapters
+### Optional: Scraping Adapters
 
 For CNKI support (requires headless browser):
 
@@ -269,28 +271,28 @@ mypy src/
 
 ## Building & Distribution
 
-### 构建独立可执行文件
+### Build Standalone Executable
 
-PyInstaller 可将应用打包为独立可执行文件，用户无需安装 Python 即可运行。
+PyInstaller packages the app into a standalone executable — users don't need Python installed.
 
 ```bash
 pip install pyinstaller
 pyinstaller refchecker.spec
 ```
 
-| 平台 | 产物 | 说明 |
-|------|------|------|
-| macOS | `dist/RefChecker.app` | 双击打开，可拖入 Applications |
-| Windows | `dist/RefChecker.exe` | 单文件 .exe，双击运行 |
-| Linux | `dist/RefChecker` | 单文件二进制 |
+| Platform | Output | Notes |
+|----------|--------|-------|
+| macOS | `dist/RefChecker.app` | Double-click to open; drag to Applications |
+| Windows | `dist/RefChecker.exe` | Single-file .exe; double-click to run |
+| Linux | `dist/RefChecker` | Single binary |
 
 ### GitHub Actions CI/CD
 
-推送代码后自动运行：
-- **测试矩阵**：Ubuntu / macOS / Windows × Python 3.11 / 3.12
-- **代码检查**：ruff lint
-- **覆盖率**：codecov 上报
-- **构建产物**：三个平台的可执行文件作为 Artifact 下载
+Automatically runs on push:
+- **Test matrix**: Ubuntu × Python 3.11 / 3.12
+- **Linting**: ruff
+- **Coverage**: reported via codecov
+- **Build artifacts**: downloadable from Actions tab
 
 ## License
 
