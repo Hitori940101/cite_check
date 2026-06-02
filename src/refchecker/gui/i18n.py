@@ -131,6 +131,41 @@ _TRANSLATIONS: dict[str, dict[Language, str]] = {
     # --- Context menu ---
     "menu.export": {"zh": "导出结果…", "en": "Export Results..."},
     "menu.open_browser": {"zh": "在浏览器中打开（{adapter}）", "en": "Open in Browser ({adapter})"},
+
+    # --- Progress widget ---
+    "progress.ready": {"zh": "就绪", "en": "Ready"},
+    "progress.verifying": {"zh": "验证中 {current}/{total}…", "en": "Verifying {current}/{total}..."},
+    "progress.done": {"zh": "完成 — {total} 条引用已验证", "en": "Done — {total} references verified"},
+
+    # --- Export dialog (additional) ---
+    "export.dlg.title": {"zh": "导出结果", "en": "Export Results"},
+    "export.dlg.format_label": {"zh": "格式：", "en": "Format:"},
+    "export.dlg.save_to": {"zh": "保存到：", "en": "Save to:"},
+    "export.dlg.browse": {"zh": "浏览…", "en": "Browse..."},
+    "export.dlg.placeholder": {"zh": "选择保存位置…", "en": "Choose save location..."},
+    "export.dlg.save_btn": {"zh": "导出", "en": "Export"},
+    "export.dlg.cancel_btn": {"zh": "取消", "en": "Cancel"},
+    "export.dlg.no_path": {"zh": "无路径", "en": "No Path"},
+    "export.dlg.no_path_msg": {"zh": "请选择保存位置。", "en": "Please choose a save location."},
+    "export.dlg.complete": {"zh": "导出完成", "en": "Export Complete"},
+    "export.dlg.complete_msg": {"zh": "结果已导出到：\n{path}", "en": "Results exported to:\n{path}"},
+    "export.dlg.error": {"zh": "错误", "en": "Error"},
+    "export.dlg.error_unknown": {"zh": "未知格式：{fmt}", "en": "Unknown format: {fmt}"},
+    "export.dlg.export_error": {"zh": "导出错误", "en": "Export Error"},
+    "export.dlg.export_failed": {"zh": "导出失败：\n{exc}", "en": "Failed to export:\n{exc}"},
+    "export.dlg.summary_total": {"zh": "总计：{total} 条引用", "en": "Total: {total} references"},
+    "export.dlg.summary_verified": {"zh": "✅ 已验证：{count}", "en": "✅ Verified: {count}"},
+    "export.dlg.summary_suspicious": {"zh": "⚠️ 可疑：{count}", "en": "⚠️ Suspicious: {count}"},
+    "export.dlg.summary_fabricated": {"zh": "❌ 疑似伪造：{count}", "en": "❌ Fabricated: {count}"},
+    "export.dlg.summary_unable": {"zh": "ℹ️ 无法验证：{count}", "en": "ℹ️ Unable: {count}"},
+    "export.dlg.save_title": {"zh": "保存结果", "en": "Save Results"},
+    "export.dlg.format_csv": {"zh": "CSV (.csv)", "en": "CSV (.csv)"},
+    "export.dlg.format_xlsx": {"zh": "Excel (.xlsx) — 彩色", "en": "Excel (.xlsx) — color-coded"},
+    "export.dlg.format_bib": {"zh": "BibTeX (.bib) — 仅已验证", "en": "BibTeX (.bib) — verified only"},
+    "export.dlg.filter_csv": {"zh": "CSV 文件 (*.csv)", "en": "CSV Files (*.csv)"},
+    "export.dlg.filter_xlsx": {"zh": "Excel 文件 (*.xlsx)", "en": "Excel Files (*.xlsx)"},
+    "export.dlg.filter_bib": {"zh": "BibTeX 文件 (*.bib)", "en": "BibTeX Files (*.bib)"},
+    "export.dlg.filter_all": {"zh": "所有文件 (*)", "en": "All Files (*)"},
 }
 
 

@@ -10,6 +10,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from refchecker.gui.i18n import t
+
 
 class ProgressWidget(QWidget):
     """Progress indicator for the verification pipeline.
@@ -33,7 +35,7 @@ class ProgressWidget(QWidget):
         self._progress_bar.setTextVisible(False)
         self._progress_bar.setFixedHeight(20)
 
-        self._status_label = QLabel("Ready")
+        self._status_label = QLabel(t("progress.ready"))
         self._status_label.setStyleSheet("color: #666; font-size: 12px;")
 
         layout.addWidget(self._progress_bar, stretch=3)
@@ -49,10 +51,10 @@ class ProgressWidget(QWidget):
         if total > 0:
             pct = int(current / total * 100)
             self._progress_bar.setValue(pct)
-            self._status_label.setText(f"Verifying {current}/{total}…")
+            self._status_label.setText(t("progress.verifying", current=current, total=total))
         else:
             self._progress_bar.setValue(0)
-            self._status_label.setText("Ready")
+            self._status_label.setText(t("progress.ready"))
 
     def set_complete(self, total: int) -> None:
         """Mark verification as complete.
@@ -61,9 +63,13 @@ class ProgressWidget(QWidget):
             total: Total number of references processed.
         """
         self._progress_bar.setValue(100)
-        self._status_label.setText(f"Done — {total} references verified")
+        self._status_label.setText(t("progress.done", total=total))
 
     def reset(self) -> None:
         """Reset to initial state."""
         self._progress_bar.setValue(0)
-        self._status_label.setText("Ready")
+        self._status_label.setText(t("progress.ready"))
+
+    def update_language(self) -> None:
+        """Update labels to match current language setting."""
+        self._status_label.setText(t("progress.ready"))

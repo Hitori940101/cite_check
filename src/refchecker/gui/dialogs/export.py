@@ -29,14 +29,9 @@ from refchecker.core.exporter import (
 )
 from refchecker.core.logging import get_logger
 from refchecker.core.models import VerificationResult, VerificationStatus
+from refchecker.gui.i18n import t
 
 logger = get_logger(__name__)
-
-_FORMAT_OPTIONS = [
-    ("CSV (.csv)", "csv"),
-    ("Excel (.xlsx) — color-coded", "xlsx"),
-    ("BibTeX (.bib) — verified only", "bib"),
-]
 
 
 class ExportDialog(QDialog):
@@ -54,7 +49,8 @@ class ExportDialog(QDialog):
     ) -> None:
         super().__init__(parent)
         self._results = results
-        self.setWindowTitle("Export Results")
+        self._format_extensions = ["csv", "xlsx", "bib"]
+        self.setWindowTitle(t("export.dlg.title"))
         self.setMinimumWidth(420)
         self._setup_ui()
 
@@ -69,9 +65,11 @@ class ExportDialog(QDialog):
         unable = sum(1 for r in self._results if r.status == VerificationStatus.UNABLE_TO_VERIFY)
 
         summary = (
-            f"Total: {len(self._results)} references\n"
-            f"✅ Verified: {verified}  ⚠️ Suspicious: {suspicious}\n"
-            f"❌ Fabricated: {fabricated}  ℹ️ Unable: {unable}"
+            f"{t('export.dlg.summary_total', total=len(self._results))}\n"
+            f"{t('export.dlg.summary_verified', count=verified)}  "
+            f"{t('export.dlg.summary_suspicious', count=suspicious)}\n"
+            f"{t('export.dlg.summary_fabricated', count=fabricated)}  "
+            f"{t('export.dlg.summary_unable', count=unable)}"
         )
         summary_label = QLabel(summary)
         summary_label.setStyleSheet("padding: 8px; background: #f5f5f5; border-radius: 4px;")
@@ -79,12 +77,14 @@ class ExportDialog(QDialog):
 
         # Format selection
         format_row = QHBoxLayout()
-        format_label = QLabel("Format:")
+        format_label = QLabel(t("export.dlg.format_label"))
         format_label.setMinimumWidth(60)
 
         self._format_combo = QComboBox()
-        for display, _ in _FORMAT_OPTIONS:
-            self._format_combo.addItem(display)
+        self._format_combo.addItem(t("export.dlg.format_csv"))
+        self._format_combo.addItem(t("export.dlg.format_xlsx"))
+        self._format_combo.addItem(t("export.dlg.format_bib"))
+        self._format_combo.currentIndexChanged.connect(self._update_extension)
 
         format_row.addWidget(format_label)
         format_row.addWidget(self._format_combo, stretch=1)
@@ -92,14 +92,14 @@ class ExportDialog(QDialog):
 
         # File path
         path_row = QHBoxLayout()
-        path_label = QLabel("Save to:")
+        path_label = QLabel(t("export.dlg.save_to"))
         path_label.setMinimumWidth(60)
 
         self._path_field = QLineEdit()
-        self._path_field.setPlaceholderText("Choose save location…")
+        self._path_field.setPlaceholderText(t("export.dlg.placeholder"))
         self._path_field.textChanged.connect(self._update_extension)
 
-        browse_btn = QPushButton("Browse…")
+        browse_btn = QPushButton(t("export.dlg.browse"))
         browse_btn.clicked.connect(self._browse)
 
         path_row.addWidget(path_label)
@@ -111,11 +111,11 @@ class ExportDialog(QDialog):
         btn_row = QHBoxLayout()
         btn_row.addStretch()
 
-        export_btn = QPushButton("Export")
+        export_btn = QPushButton(t("export.dlg.save_btn"))
         export_btn.setDefault(True)
         export_btn.clicked.connect(self._do_export)
 
-        cancel_btn = QPushButton("Cancel")
+        cancel_btn = QPushButton(t("export.dlg.cancel_btn"))
         cancel_btn.clicked.connect(self.reject)
 
         btn_row.addWidget(export_btn)
@@ -125,37 +125,56 @@ class ExportDialog(QDialog):
     def _browse(self) -> None:
         """Open file save dialog."""
         idx = self._format_combo.currentIndex()
-        _, fmt = _FORMAT_OPTIONS[idx]
+        fmt = self._format_extensions[idx]
 
         filters = {
-            "csv": "CSV Files (*.csv)",
-            "xlsx": "Excel Files (*.xlsx)",
-            "bib": "BibTeX Files (*.bib)",
+            "csv": t("export.dlg.filter_csv"),
+            "xlsx": t("export.dlg.filter_xlsx"),
+            "bib": t("export.dlg.filter_bib"),
         }
 
         path, _ = QFileDialog.getSaveFileName(
             self,
-            "Save Results",
+            t("export.dlg.save_title"),
             f"verification_results.{fmt}",
-            filters.get(fmt, "All Files (*)"),
+            filters.get(fmt, t("export.dlg.filter_all")),
         )
         if path:
             self._path_field.setText(path)
 
     def _update_extension(self) -> None:
         """Ensure file path extension matches selected format."""
-        pass  # Extension is set via browse dialog
+        path_str = self._path_field.text().strip()
+        if not path_str:
+            return
+
+        idx = self._format_combo.currentIndex()
+        fmt = self._format_extensions[idx]
+        ext_map = {0: ".csv", 1: ".xlsx", 2: ".bib"}
+        target_ext = ext_map.get(idx, "")
+
+        # Strip any known extension and add the correct one
+        for e in (".csv", ".xlsx", ".bib"):
+            if path_str.endswith(e):
+                path_str = path_str[: -len(e)]
+                break
+
+        self._path_field.blockSignals(True)
+        self._path_field.setText(path_str + target_ext)
+        self._path_field.blockSignals(False)
 
     def _do_export(self) -> None:
         """Execute the export."""
         path_str = self._path_field.text().strip()
         if not path_str:
-            QMessageBox.warning(self, "No Path", "Please choose a save location.")
+            QMessageBox.warning(
+                self, t("export.dlg.no_path"), t("export.dlg.no_path_msg"),
+            )
             return
 
         path = Path(path_str)
         idx = self._format_combo.currentIndex()
-        _, fmt = _FORMAT_OPTIONS[idx]
+        fmt = self._format_extensions[idx]
 
         try:
             if fmt == "csv":
@@ -165,16 +184,20 @@ class ExportDialog(QDialog):
             elif fmt == "bib":
                 export_bibtex_to_file(self._results, path)
             else:
-                QMessageBox.critical(self, "Error", f"Unknown format: {fmt}")
+                QMessageBox.critical(
+                    self, t("export.dlg.error"), t("export.dlg.error_unknown", fmt=fmt),
+                )
                 return
 
             QMessageBox.information(
                 self,
-                "Export Complete",
-                f"Results exported to:\n{path}",
+                t("export.dlg.complete"),
+                t("export.dlg.complete_msg", path=path),
             )
             self.accept()
 
         except Exception as exc:
             logger.error("export_error", error=str(exc))
-            QMessageBox.critical(self, "Export Error", f"Failed to export:\n{exc}")
+            QMessageBox.critical(
+                self, t("export.dlg.export_error"), t("export.dlg.export_failed", exc=str(exc)),
+            )
