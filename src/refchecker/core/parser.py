@@ -337,6 +337,35 @@ def parse_file(file_path: Union[str, Path]) -> list[ReferenceItem]:
     )
 
 
+def parse_text(content: str) -> list[ReferenceItem]:
+    """Auto-detect format and parse a text string into ReferenceItem objects.
+
+    Intended for clipboard-pasted citation text.
+
+    Args:
+        content: Raw text containing citations (BibTeX or GBT 7714).
+
+    Returns:
+        List of parsed ReferenceItem objects.
+
+    Raises:
+        ParserError: If the format cannot be detected or parsing fails.
+    """
+    if not content.strip():
+        raise ParserError("Empty content — nothing to parse.")
+
+    fmt = detect_format(content)
+    if fmt == "bibtex":
+        return parse_bibtex(content)
+    if fmt == "gbt7714":
+        return parse_gbt7714(content)
+
+    raise ParserError(
+        "Cannot detect citation format from pasted text.",
+        details="Expected BibTeX (starts with @) or GBT 7714 (starts with [N]).",
+    )
+
+
 def _entry_to_reference(
     entry: bibtexparser.model.Entry,
     *,

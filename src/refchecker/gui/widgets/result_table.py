@@ -145,6 +145,35 @@ class ResultTableWidget(QTableWidget):
             self._results.append(pending)
             self._populate_row(row, pending)
 
+    def add_references(self, new_refs: list[ReferenceItem]) -> None:
+        """Append additional references to the table (PENDING status).
+
+        Used for clipboard paste accumulation. Deduplicates against
+        existing references by title + first author + year.
+
+        Args:
+            new_refs: New reference items to append.
+        """
+        existing_keys = set()
+        for ref in self._references:
+            key = (ref.title.lower().strip(), ref.authors[0].lower().strip() if ref.authors else "", ref.year)
+            existing_keys.add(key)
+
+        added = 0
+        start_row = self.rowCount()
+        for ref in new_refs:
+            key = (ref.title.lower().strip(), ref.authors[0].lower().strip() if ref.authors else "", ref.year)
+            if key in existing_keys:
+                continue
+            existing_keys.add(key)
+            self._references.append(ref)
+            pending = VerificationResult(reference=ref)
+            self._results.append(pending)
+            row = start_row + added
+            self.insertRow(row)
+            self._populate_row(row, pending)
+            added += 1
+
     def get_references(self) -> list[ReferenceItem]:
         """Get the current reference items.
 

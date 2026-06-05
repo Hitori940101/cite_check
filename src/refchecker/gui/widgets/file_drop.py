@@ -1,7 +1,8 @@
 """Drag-and-drop file upload widget for RefChecker.
 
-Accepts .bib and .txt files via drag-and-drop or click-to-browse.
-Emits a signal with the file path when a valid file is dropped.
+Accepts .bib and .txt files via drag-and-drop, click-to-browse,
+or paste from clipboard.
+Emits signals with the file path or text content.
 """
 
 from pathlib import Path
@@ -31,16 +32,26 @@ _DROP_STYLE = """
 """
 _LABEL_STYLE = "color: #666; font-size: 14px;"
 _SUB_LABEL_STYLE = "color: #999; font-size: 12px;"
+_PASTE_LABEL_STYLE = (
+    "color: #4a90d9; font-size: 12px; "
+    "padding: 4px 8px; border-radius: 4px;"
+)
+_PASTE_LABEL_HOVER_STYLE = (
+    "color: #fff; font-size: 12px; "
+    "background-color: #4a90d9; padding: 4px 8px; border-radius: 4px;"
+)
 
 
 class FileDropWidget(QFrame):
-    """A widget that accepts file drops and click-to-browse.
+    """A widget that accepts file drops, click-to-browse, or clipboard paste.
 
     Signals:
         file_selected(Path): Emitted when a valid file is selected.
+        content_pasted(str): Emitted when text is pasted from clipboard.
     """
 
     file_selected = Signal(Path)
+    content_pasted = Signal(str)
 
     def __init__(self, parent: object = None) -> None:
         super().__init__(parent)
@@ -62,25 +73,46 @@ class FileDropWidget(QFrame):
         icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         inner.addWidget(icon_label)
 
-        main_label = QLabel("Drop .bib or .txt file here")
+        main_label = QLabel(t("drop.main"))
         main_label.setStyleSheet(_LABEL_STYLE)
         main_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         inner.addWidget(main_label)
 
-        sub_label = QLabel("or click to browse")
+        sub_label = QLabel(t("drop.sub"))
         sub_label.setStyleSheet(_SUB_LABEL_STYLE)
         sub_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         inner.addWidget(sub_label)
+
+        # Paste from clipboard label
+        paste_label = QLabel(t("drop.paste"))
+        paste_label.setStyleSheet(_PASTE_LABEL_STYLE)
+        paste_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        paste_label.setCursor(Qt.CursorShape.PointingHandCursor)
+        paste_label.mousePressEvent = self._on_paste_clicked  # type: ignore[assignment]
+        inner.addWidget(paste_label)
 
         layout.addLayout(inner)
 
     def update_language(self) -> None:
         """Update labels to current language."""
-        # Update labels by finding them in the layout
         inner = self.layout().itemAt(0).layout()
-        if inner and inner.count() >= 3:
+        if inner and inner.count() >= 4:
             inner.itemAt(1).widget().setText(t("drop.main"))
             inner.itemAt(2).widget().setText(t("drop.sub"))
+            inner.itemAt(3).widget().setText(t("drop.paste"))
+
+    # --- Clipboard paste ---
+
+    def _on_paste_clicked(self, event: object) -> None:
+        """Read clipboard text and emit content_pasted signal."""
+        from PySide6.QtWidgets import QApplication
+
+        clipboard = QApplication.clipboard()
+        if clipboard is None:
+            return
+        text = clipboard.text().strip()
+        if text:
+            self.content_pasted.emit(text)
 
     # --- Drag-and-drop ---
 

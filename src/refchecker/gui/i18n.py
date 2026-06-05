@@ -58,6 +58,12 @@ _TRANSLATIONS: dict[str, dict[Language, str]] = {
     "drop.filter": {"zh": "引用文件 (*.bib *.txt);;BibTeX (*.bib);;文本 (*.txt);;所有文件 (*)",
                     "en": "Reference Files (*.bib *.txt);;BibTeX (*.bib);;Text (*.txt);;All Files (*)"},
     "drop.dialog_title": {"zh": "打开引用文件", "en": "Open Reference File"},
+    "drop.paste": {"zh": "📋 从剪贴板粘贴", "en": "📋 Paste from Clipboard"},
+
+    # --- Paste status ---
+    "status.pasted": {"zh": "已粘贴 {count} 条引用（共 {total} 条）", "en": "Pasted {count} references ({total} total)"},
+    "error.paste_title": {"zh": "粘贴解析错误", "en": "Paste Parse Error"},
+    "error.paste_empty": {"zh": "剪贴板为空或无法识别引用格式。", "en": "Clipboard is empty or citation format not recognized."},
 
     # --- Error dialogs ---
     "error.parse_title": {"zh": "解析错误", "en": "Parse Error"},

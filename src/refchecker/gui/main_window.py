@@ -107,6 +107,7 @@ class MainWindow(QMainWindow):
         from refchecker.gui.widgets.file_drop import FileDropWidget
         self._file_drop = FileDropWidget()
         self._file_drop.file_selected.connect(self._on_file_selected)
+        self._file_drop.content_pasted.connect(self._on_content_pasted)
         layout.addWidget(self._file_drop)
 
         # --- Adapter selector ---
@@ -185,6 +186,37 @@ class MainWindow(QMainWindow):
             self._export_btn.setEnabled(False)
         except Exception as exc:
             QMessageBox.critical(self, t("error.parse_title"), t("error.parse_msg", exc=exc))
+
+    def _on_content_pasted(self, content: str) -> None:
+        """Handle clipboard paste from drop widget.
+
+        Parses pasted text and accumulates references into the table.
+        """
+        from refchecker.core.parser import parse_text
+
+        if not content.strip():
+            QMessageBox.warning(self, t("error.paste_title"), t("error.paste_empty"))
+            return
+
+        try:
+            new_refs = parse_text(content)
+        except Exception as exc:
+            QMessageBox.critical(self, t("error.paste_title"), t("error.parse_msg", exc=exc))
+            return
+
+        if not new_refs:
+            QMessageBox.warning(self, t("error.paste_title"), t("error.paste_empty"))
+            return
+
+        # Accumulate into table (dedup happens inside add_references)
+        self._result_table.add_references(new_refs)
+        self._references = self._result_table.get_references()
+        total = len(self._references)
+        count = len(new_refs)
+        self._statusbar.showMessage(t("status.pasted", count=count, total=total))
+        self._verify_btn.setEnabled(total > 0)
+        self._file_drop.setHidden(True)
+        self._export_btn.setEnabled(False)
 
     # --- Verification ---
 
